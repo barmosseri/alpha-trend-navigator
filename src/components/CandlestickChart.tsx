@@ -104,8 +104,8 @@ const CandlestickChart = ({
     );
   };
 
-  // Format the domain for Y-axis
-  const formatYAxis = (domain: [number, number]) => {
+  // Format the domain for Y-axis - Fixed TypeScript error here
+  const formatYAxis = (domain: [number, number]): [number, number] => {
     const min = Math.min(...combinedData.map(d => d.low));
     const max = Math.max(...combinedData.map(d => d.high));
     const padding = (max - min) * 0.1;

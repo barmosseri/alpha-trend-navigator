@@ -1,47 +1,136 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAssets } from '@/contexts/AssetsContext';
 import { 
-  generateMockCandlestickData, 
-  generateMockSMAData, 
-  mockAssets 
-} from '@/lib/mockData';
-import { CandlestickData, SMAData } from '@/lib/types';
+  fetchAssetData,
+  fetchCandlestickData,
+  generateSMAData
+} from '@/services/marketData';
+import { Asset, CandlestickData, SMAData } from '@/lib/types';
 import CandlestickChart from '@/components/CandlestickChart';
 import { ArrowUp, ArrowDown, TrendingUp, TrendingDown, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { mockAssets } from '@/lib/mockData'; // We'll fallback to mock data if API fails
+import { toast } from '@/components/ui/use-toast';
 
 const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { assets, addToWatchlist, removeFromWatchlist, isInWatchlist } = useAssets();
   
-  const [asset, setAsset] = useState(assets.find(a => a.id === id));
+  const [asset, setAsset] = useState<Asset | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [candlestickData, setCandlestickData] = useState<CandlestickData[]>([]);
   const [smaData, setSmaData] = useState<SMAData[]>([]);
   const [timeframe, setTimeframe] = useState<'30d' | '90d' | '1y'>('90d');
   
+  // Load asset data
   useEffect(() => {
     if (!id) return;
     
-    // Get the asset data
-    const foundAsset = mockAssets.find(a => a.id === id);
-    if (foundAsset) {
-      setAsset(foundAsset);
-      
-      // Generate chart data
-      const days = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
-      const candleData = generateMockCandlestickData(id, days);
-      setCandlestickData(candleData);
-      
-      // Generate SMA data
-      const sma = generateMockSMAData(candleData);
-      setSmaData(sma);
-    }
-  }, [id, timeframe]);
+    const loadAssetData = async () => {
+      setIsLoading(true);
+
+      try {
+        // Try to find in already loaded assets
+        const cachedAsset = assets.find(a => a.id === id);
+        if (cachedAsset) {
+          setAsset(cachedAsset);
+        } else {
+          // If not found, try to fetch from API
+          const symbol = id;
+          const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
+          const fetchedAsset = await fetchAssetData(symbol, isStock);
+          
+          if (fetchedAsset) {
+            setAsset(fetchedAsset);
+          } else {
+            // Fallback to mock data if API fails
+            const mockAsset = mockAssets.find(a => a.id === id);
+            if (mockAsset) {
+              setAsset(mockAsset);
+              toast({
+                title: "Using mock data",
+                description: "Could not fetch real-time data. Using demo data instead.",
+                variant: "destructive"
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading asset:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load asset data. Using mock data instead.",
+          variant: "destructive"
+        });
+        
+        // Fallback to mock
+        const mockAsset = mockAssets.find(a => a.id === id);
+        if (mockAsset) setAsset(mockAsset);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadAssetData();
+  }, [id, assets]);
+  
+  // Load chart data
+  useEffect(() => {
+    if (!asset) return;
+    
+    const loadChartData = async () => {
+      try {
+        // Try to fetch from API
+        const isStock = asset.type === 'stock';
+        const symbol = asset.symbol;
+        const data = await fetchCandlestickData(symbol, isStock, timeframe);
+        
+        if (data.length > 0) {
+          setCandlestickData(data);
+          const sma = generateSMAData(data);
+          setSmaData(sma);
+        } else {
+          throw new Error('No chart data available');
+        }
+      } catch (error) {
+        console.error('Error loading chart data:', error);
+        toast({
+          title: "Using mock chart data",
+          description: "Could not fetch real-time chart data. Using demo data instead.",
+          variant: "destructive"
+        });
+        
+        // Use mock data as fallback
+        const mockData = generateMockCandlestickData(asset.id, timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365);
+        setCandlestickData(mockData);
+        const sma = generateMockSMAData(mockData);
+        setSmaData(sma);
+      }
+    };
+    
+    loadChartData();
+  }, [asset, timeframe]);
+  
+  // Import mock data generation functions for fallback
+  const { 
+    generateMockCandlestickData,
+    generateMockSMAData 
+  } = require('@/lib/mockData');
+  
+  if (isLoading) {
+    return (
+      <div className="container py-12 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin mx-auto mb-4"></div>
+          <div>Loading asset data...</div>
+        </div>
+      </div>
+    );
+  }
   
   if (!asset) {
     return <div className="container py-12 text-center">Asset not found</div>;
@@ -137,7 +226,10 @@ const AssetDetail = () => {
               />
             ) : (
               <div className="h-[400px] flex items-center justify-center">
-                Loading chart data...
+                <div className="text-center">
+                  <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin mx-auto mb-4"></div>
+                  <div>Loading chart data...</div>
+                </div>
               </div>
             )}
           </CardContent>
