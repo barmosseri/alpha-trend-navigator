@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAssets } from '@/contexts/AssetsContext';
@@ -115,12 +114,6 @@ const AssetDetail = () => {
     
     loadChartData();
   }, [asset, timeframe]);
-  
-  // Import mock data generation functions for fallback
-  const { 
-    generateMockCandlestickData,
-    generateMockSMAData 
-  } = require('@/lib/mockData');
   
   if (isLoading) {
     return (
