@@ -59,13 +59,13 @@ const AssetDetail = () => {
 
       try {
         // Try to fetch from API first
-        const symbol = id;
-        const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
-        const fetchedAsset = await fetchAssetData(symbol, isStock);
-        
-        if (fetchedAsset) {
-          setAsset(fetchedAsset);
-        } else {
+          const symbol = id;
+          const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
+          const fetchedAsset = await fetchAssetData(symbol, isStock);
+          
+          if (fetchedAsset) {
+            setAsset(fetchedAsset);
+          } else {
           // Only as a last resort, check in already loaded assets
           const cachedAsset = assets.find(a => a.id === id);
           if (cachedAsset) {

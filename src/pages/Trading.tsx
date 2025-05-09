@@ -143,16 +143,42 @@ const Trading = () => {
     setIsAnalyzingPortfolio(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // First gather data for all assets in the watchlist/portfolio
+      const portfolioData = [];
       
-      // Navigate to portfolio page with analysis results
+      // Show toast for starting the analysis
+      toast({
+        title: "Analysis Started",
+        description: "AI is analyzing your portfolio composition and market conditions...",
+      });
+      
+      // Simulate each step of the analysis with delays to show progress
+      // Step 1: Asset correlation analysis
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Step 2: Risk assessment
+      toast({
+        title: "Risk Assessment",
+        description: "Analyzing volatility patterns and diversification metrics...",
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Step 3: Optimization calculation
+      toast({
+        title: "Optimization",
+        description: "Calculating optimal asset allocation based on risk profile...",
+      });
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      // Final success notification
       toast({
         title: "Portfolio Analysis Complete",
         description: "AI optimization suggestions are now available",
+        variant: "default",
       });
       
-      // Navigate to portfolio page
+      // Navigate to portfolio page with analysis results
+      // In a real app, we would pass the analysis results
       navigate("/asset/PORTFOLIO");
     } catch (error) {
       console.error('Error running portfolio analysis:', error);

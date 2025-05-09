@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ComposedChart,
   Bar,
@@ -11,7 +11,9 @@ import {
   ReferenceLine,
   ReferenceArea,
   Rectangle,
-  Legend
+  Legend,
+  Animating,
+  Animated
 } from 'recharts';
 import { CandlestickData, SMAData, PatternResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -24,12 +26,13 @@ interface CandlestickChartProps {
   selectedPattern?: PatternResult | null;
 }
 
-// Custom candlestick renderer component
+// Custom candlestick renderer component with improved visuals
 const CandlestickBar = (props: any) => {
-  const { x, y, width, height, open, close, low, high } = props;
+  const { x, y, width, height, open, close, low, high, index } = props;
   
   const isIncreasing = close > open;
-  const color = isIncreasing ? "#33B894" : "#EA384C"; // Green for increasing, Red for decreasing
+  // Use more vibrant colors for better visualization
+  const color = isIncreasing ? "#22C55E" : "#EF4444"; // Green for increasing, Red for decreasing
   
   const bodyHeight = Math.abs(y - (isIncreasing ? open : close));
   const bodyY = isIncreasing ? y : y - bodyHeight;
@@ -40,8 +43,11 @@ const CandlestickBar = (props: any) => {
   const wickHeight2 = (y - low) - wickY2;
   
   // Calculate body width based on chart (can be dynamically adjusted)
-  const bodyWidth = width * 0.8;
+  const bodyWidth = Math.max(1, Math.min(width * 0.85, 8)); // Cap width for realistic appearance
   const bodyX = x + (width - bodyWidth) / 2;
+
+  // Animation delay based on index
+  const animationDelay = index * 10;
 
   return (
     <g>
@@ -52,7 +58,9 @@ const CandlestickBar = (props: any) => {
         x2={x + width / 2} 
         y2={wickY1} 
         stroke={color} 
-        strokeWidth={1} 
+        strokeWidth={1}
+        opacity={0.9}
+        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Lower wick */}
@@ -62,7 +70,9 @@ const CandlestickBar = (props: any) => {
         x2={x + width / 2} 
         y2={y - low} 
         stroke={color} 
-        strokeWidth={1} 
+        strokeWidth={1}
+        opacity={0.9}
+        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Candle body */}
@@ -70,29 +80,43 @@ const CandlestickBar = (props: any) => {
         x={bodyX}
         y={bodyY}
         width={bodyWidth}
-        height={bodyHeight || 1} // Ensure height is at least 1px for flat candles
+        height={Math.max(bodyHeight || 1, 1)} // Ensure height is at least 1px for flat candles
         fill={isIncreasing ? color : color}
         stroke={color}
         strokeWidth={1}
+        opacity={0.9}
+        style={{ animation: `growIn 0.4s ease ${animationDelay}ms forwards` }}
       />
     </g>
   );
 };
 
-// Volume bar renderer component
+// Enhanced volume bar renderer component
 const VolumeBar = (props: any) => {
-  const { x, y, width, height, open, close } = props;
+  const { x, y, width, height, open, close, index } = props;
   
   const isIncreasing = close >= open;
-  const color = isIncreasing ? "rgba(51, 184, 148, 0.7)" : "rgba(234, 56, 76, 0.7)"; // Green for up, Red for down
+  // Use semi-transparent colors that match the candlesticks
+  const color = isIncreasing ? "rgba(34, 197, 94, 0.7)" : "rgba(239, 68, 68, 0.7)"; // Green for up, Red for down
+  const strokeColor = isIncreasing ? "rgba(34, 197, 94, 0.9)" : "rgba(239, 68, 68, 0.9)";
+  
+  // Thinner bars look more realistic
+  const barWidth = Math.min(width * 0.7, 6);
+  
+  // Animation delay based on index
+  const animationDelay = index * 10;
   
   return (
     <Rectangle
-      x={x}
+      x={x + (width - barWidth) / 2}
       y={y}
-      width={width * 0.8}
+      width={barWidth}
       height={height}
       fill={color}
+      stroke={strokeColor}
+      strokeWidth={0.5}
+      radius={[1, 1, 0, 0]}
+      style={{ animation: `growUp 0.4s ease ${animationDelay}ms forwards` }}
     />
   );
 };
@@ -106,25 +130,29 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
 }) => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [volumeMax, setVolumeMax] = useState<number>(0);
+  const [hoverData, setHoverData] = useState<any>(null);
   
-  // Log the data we're receiving to check if it's real or mock
+  // Log the data we're receiving to verify its source
   useEffect(() => {
-    console.log('CandlestickChart received data:', {
-      candles: candlestickData.length,
-      firstCandle: candlestickData[0],
-      lastCandle: candlestickData[candlestickData.length - 1],
-      sma: smaData.length
-    });
+    if (candlestickData.length > 0) {
+      console.log('CandlestickChart received data:', {
+        candles: candlestickData.length,
+        firstCandle: candlestickData[0],
+        lastCandle: candlestickData[candlestickData.length - 1],
+        sma: smaData.length,
+        isRealData: !window.isUsingDemoData
+      });
+    }
   }, [candlestickData, smaData]);
   
+  // Process chart data with enhanced metrics
   useEffect(() => {
-    // Process the data for better visualization
     if (candlestickData.length) {
       // Get max volume for scaling
       const maxVol = Math.max(...candlestickData.map(d => d.volume));
       setVolumeMax(maxVol);
       
-      // Enhanced data processing
+      // Enhanced data processing with more technical indicators
       const enhanced = candlestickData.map((candle, index) => {
         const smaPoint = smaData.find(sma => sma.date === candle.date);
         
@@ -134,7 +162,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           ? ((candle.close - previousDay.close) / previousDay.close) * 100 
           : 0;
           
-        // Calculate volatility as a simple 5-day rolling window
+        // Calculate volatility as a 5-day rolling window
         const volatilityWindow = candlestickData.slice(
           Math.max(0, index - 5), 
           index + 1
@@ -144,7 +172,33 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const volatility = prices.length > 1
           ? Math.sqrt(prices.reduce((sum, price) => sum + Math.pow(price - avgPrice, 2), 0) / prices.length)
           : 0;
-          
+        
+        // Calculate Average True Range (ATR) for a 14-day period
+        const atrWindow = Math.min(14, index + 1);
+        let atr = 0;
+        
+        if (index > 0) {
+          const trValues = [];
+          for (let i = Math.max(0, index - atrWindow + 1); i <= index; i++) {
+            const curr = candlestickData[i];
+            const prev = i > 0 ? candlestickData[i - 1] : curr;
+            
+            // True Range = max(high - low, abs(high - prevClose), abs(low - prevClose))
+            const tr = Math.max(
+              curr.high - curr.low,
+              Math.abs(curr.high - prev.close),
+              Math.abs(curr.low - prev.close)
+            );
+            trValues.push(tr);
+          }
+          atr = trValues.reduce((sum, val) => sum + val, 0) / trValues.length;
+        }
+        
+        // Calculate MACD values (simplified)
+        const ema12 = calculateEMA(candlestickData.slice(0, index + 1).map(d => d.close), 12);
+        const ema26 = calculateEMA(candlestickData.slice(0, index + 1).map(d => d.close), 26);
+        const macd = ema12 - ema26;
+        
         return {
           date: candle.date,
           // OHLC data
@@ -156,15 +210,19 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           highLowRange: candle.high - candle.low,
           // Volume data
           volume: candle.volume,
-          // Scaled volume for combined chart (15% of chart height)
-          volumeScaled: (candle.volume / maxVol) * (Math.max(...candlestickData.map(d => d.high)) - Math.min(...candlestickData.map(d => d.low))) * 0.15,
+          // Scaled volume for combined chart (10% of chart height)
+          volumeScaled: (candle.volume / maxVol) * (Math.max(...candlestickData.map(d => d.high)) - Math.min(...candlestickData.map(d => d.low))) * 0.1,
           // Change visualization data
           dayChange,
           volatility,
+          atr,
+          macd,
           // Optional SMA values
           sma10: smaPoint?.sma10,
           sma30: smaPoint?.sma30,
-          sma50: smaPoint?.sma50
+          sma50: smaPoint?.sma50,
+          // Add index for animation
+          index
         };
       });
       
@@ -172,53 +230,92 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [candlestickData, smaData]);
   
-  // Custom tooltip content with enhanced information
+  // Calculate important metrics for display
+  const chartMetrics = useMemo(() => {
+    if (!candlestickData.length) return null;
+    
+    const firstCandle = candlestickData[0];
+    const lastCandle = candlestickData[candlestickData.length - 1];
+    const periodChange = ((lastCandle.close - firstCandle.close) / firstCandle.close) * 100;
+    
+    // Find highest high and lowest low
+    const highestHigh = Math.max(...candlestickData.map(d => d.high));
+    const lowestLow = Math.min(...candlestickData.map(d => d.low));
+    
+    // Calculate average daily volatility
+    const dailyChanges = candlestickData.slice(1).map((candle, i) => {
+      const prevCandle = candlestickData[i];
+      return Math.abs((candle.close - prevCandle.close) / prevCandle.close) * 100;
+    });
+    
+    const avgDailyVolatility = dailyChanges.reduce((sum, change) => sum + change, 0) / dailyChanges.length;
+    
+    return {
+      periodChange,
+      highestHigh,
+      lowestLow,
+      avgDailyVolatility,
+      startDate: firstCandle.date,
+      endDate: lastCandle.date
+    };
+  }, [candlestickData]);
+  
+  // Enhanced tooltip content with more technical details
   const renderTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
+      setHoverData(data);
       
       return (
         <div className="bg-card shadow-md border rounded-lg p-3">
-          <div className="font-semibold">{new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+          <div className="font-semibold border-b pb-1 mb-2">
+            {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
             <div>Open:</div>
-            <div className="text-right">${data.open.toFixed(2)}</div>
+            <div className="text-right font-medium">${data.open.toFixed(2)}</div>
             <div>High:</div>
-            <div className="text-right">${data.high.toFixed(2)}</div>
+            <div className="text-right font-medium">${data.high.toFixed(2)}</div>
             <div>Low:</div>
-            <div className="text-right">${data.low.toFixed(2)}</div>
+            <div className="text-right font-medium">${data.low.toFixed(2)}</div>
             <div>Close:</div>
             <div className={cn(
-              "text-right",
+              "text-right font-medium",
               data.close >= data.open ? "text-app-green" : "text-app-red"
             )}>
               ${data.close.toFixed(2)}
             </div>
             <div>Change:</div>
             <div className={cn(
-              "text-right",
+              "text-right font-medium",
               data.dayChange >= 0 ? "text-app-green" : "text-app-red"
             )}>
               {data.dayChange >= 0 ? "+" : ""}{data.dayChange.toFixed(2)}%
             </div>
             <div>Volume:</div>
-            <div className="text-right">{(data.volume / 1000000).toFixed(2)}M</div>
+            <div className="text-right font-medium">
+              {data.volume >= 1000000 
+                ? `${(data.volume / 1000000).toFixed(2)}M` 
+                : `${(data.volume / 1000).toFixed(0)}K`}
+            </div>
+            <div>ATR:</div>
+            <div className="text-right font-medium">${data.atr.toFixed(2)}</div>
             {data.sma10 && (
               <>
                 <div>SMA10:</div>
-                <div className="text-right">${data.sma10.toFixed(2)}</div>
+                <div className="text-right font-medium">${data.sma10.toFixed(2)}</div>
               </>
             )}
             {data.sma30 && (
               <>
                 <div>SMA30:</div>
-                <div className="text-right">${data.sma30.toFixed(2)}</div>
+                <div className="text-right font-medium">${data.sma30.toFixed(2)}</div>
               </>
             )}
             {data.sma50 && (
               <>
                 <div>SMA50:</div>
-                <div className="text-right">${data.sma50.toFixed(2)}</div>
+                <div className="text-right font-medium">${data.sma50.toFixed(2)}</div>
               </>
             )}
           </div>
@@ -229,10 +326,24 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     return null;
   };
   
-  // Find min and max prices for the chart
+  // Helper function to calculate EMA
+  const calculateEMA = (prices: number[], period: number): number => {
+    if (prices.length < period) return prices[prices.length - 1];
+    
+    const k = 2 / (period + 1);
+    let emaValue = prices.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
+    
+    for (let i = period; i < prices.length; i++) {
+      emaValue = (prices[i] - emaValue) * k + emaValue;
+    }
+    
+    return emaValue;
+  };
+  
+  // Find min and max prices for the chart with proper padding
   const prices = candlestickData.flatMap(d => [d.high, d.low]);
-  const minPrice = Math.floor(Math.min(...prices) * 0.99); // Add small padding
-  const maxPrice = Math.ceil(Math.max(...prices) * 1.01);
+  const minPrice = Math.floor(Math.min(...prices) * 0.99); // Add 1% padding
+  const maxPrice = Math.ceil(Math.max(...prices) * 1.01); // Add 1% padding
   
   // Pattern visualization
   const patternStartIndex = selectedPattern 
@@ -251,14 +362,14 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     ? candlestickData[patternEndIndex].date
     : '';
   
-  // Get pattern color based on signal
+  // Get pattern color based on signal with more vibrant colors
   const getPatternColor = () => {
-    if (!selectedPattern) return 'rgba(99, 102, 241, 0.2)'; // Default blue
+    if (!selectedPattern) return 'rgba(99, 102, 241, 0.3)'; // Default blue
     
     if (selectedPattern.signal === 'bullish') {
-      return 'rgba(51, 184, 148, 0.3)'; // Green
+      return 'rgba(34, 197, 94, 0.3)'; // Green
     } else if (selectedPattern.signal === 'bearish') {
-      return 'rgba(234, 56, 76, 0.3)'; // Red
+      return 'rgba(239, 68, 68, 0.3)'; // Red
     } else {
       return 'rgba(245, 158, 11, 0.3)'; // Yellow/orange
     }
@@ -272,12 +383,13 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
       return (
         <ReferenceLine 
           y={selectedPattern.level} 
-          stroke={selectedPattern.patternType === 'SUPPORT' ? "#33b894" : "#EA384C"} 
+          stroke={selectedPattern.patternType === 'SUPPORT' ? "#22C55E" : "#EF4444"} 
           strokeDasharray="3 3" 
+          strokeWidth={1.5}
           label={{
             value: `${selectedPattern.patternType === 'SUPPORT' ? 'Support' : 'Resistance'}: $${selectedPattern.level?.toFixed(2)}`,
             position: 'insideBottomRight',
-            fill: selectedPattern.patternType === 'SUPPORT' ? "#33b894" : "#EA384C",
+            fill: selectedPattern.patternType === 'SUPPORT' ? "#22C55E" : "#EF4444",
             fontSize: 12
           }}
         />
@@ -289,11 +401,40 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   
   return (
     <div className="w-full">
+      {/* Add chart summary metrics */}
+      {chartMetrics && (
+        <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
+          <div className="text-muted-foreground">
+            Period: <span className="text-foreground font-medium">
+              {new Date(chartMetrics.startDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})} - 
+              {new Date(chartMetrics.endDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
+            </span>
+          </div>
+          <div className="text-muted-foreground">
+            Change: <span className={cn(
+              "font-medium",
+              chartMetrics.periodChange >= 0 ? "text-app-green" : "text-app-red"
+            )}>
+              {chartMetrics.periodChange >= 0 ? "+" : ""}{chartMetrics.periodChange.toFixed(2)}%
+            </span>
+          </div>
+          <div className="text-muted-foreground">
+            Range: <span className="font-medium">${chartMetrics.lowestLow.toFixed(2)} - ${chartMetrics.highestHigh.toFixed(2)}</span>
+          </div>
+          <div className="text-muted-foreground">
+            Avg Vol: <span className="font-medium">{chartMetrics.avgDailyVolatility.toFixed(2)}%</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Main chart */}
       <div className="h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={chartData}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            animationDuration={1000}
+            animationEasing="ease-in-out"
           >
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
             
@@ -309,6 +450,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
               tick={{ fill: '#9CA3AF' }}
               tickFormatter={(value) => `$${value}`}
               orientation="right"
+              width={60}
+              tickCount={6}
             />
             
             <Tooltip content={renderTooltip} />
@@ -321,9 +464,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 x2={patternEndDate} 
                 fill={getPatternColor()} 
                 fillOpacity={0.3} 
-                stroke={selectedPattern.signal === 'bullish' ? "#33b894" : 
-                        selectedPattern.signal === 'bearish' ? "#EA384C" : "#f59e0b"}
+                stroke={selectedPattern.signal === 'bullish' ? "#22C55E" : 
+                        selectedPattern.signal === 'bearish' ? "#EF4444" : "#f59e0b"}
                 strokeDasharray="3 3"
+                strokeWidth={1.5}
               />
             )}
             
@@ -336,12 +480,13 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 <Line 
                   type="monotone" 
                   dataKey="sma10" 
-                  stroke="#33b894" 
+                  stroke="#22C55E" 
                   strokeWidth={1.5} 
                   dot={false}
                   name="SMA10"
                   activeDot={false}
-                  animationDuration={1000}
+                  animationDuration={1500}
+                  isAnimationActive={true}
                 />
                 <Line 
                   type="monotone" 
@@ -351,17 +496,19 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA30"
                   activeDot={false}
-                  animationDuration={1000}
+                  animationDuration={1500}
+                  isAnimationActive={true}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="sma50" 
-                  stroke="#EA384C" 
+                  stroke="#EF4444" 
                   strokeWidth={1.5} 
                   dot={false}
                   name="SMA50"
                   activeDot={false}
-                  animationDuration={1000}
+                  animationDuration={1500}
+                  isAnimationActive={true}
                 />
               </>
             )}
@@ -373,6 +520,9 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 shape={<VolumeBar />} 
                 barSize={6}
                 name="Volume"
+                isAnimationActive={true}
+                animationDuration={1200}
+                animationEasing="ease-out"
               />
             )}
             
@@ -381,6 +531,9 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
               dataKey="highLowRange"
               shape={<CandlestickBar />}
               name="OHLC"
+              isAnimationActive={true}
+              animationDuration={1000}
+              animationEasing="ease-out"
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -393,6 +546,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             <ComposedChart
               data={chartData}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              animationDuration={1000}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
               <XAxis 
@@ -406,7 +560,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 tick={{ fill: '#9CA3AF' }}
                 tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(0)}M` : `${(value / 1000).toFixed(0)}K`}
                 orientation="right"
-                width={40}
+                width={50}
               />
               
               <Tooltip content={renderTooltip} />
@@ -415,6 +569,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 dataKey="volume" 
                 shape={<VolumeBar />} 
                 barSize={6}
+                isAnimationActive={true}
+                animationDuration={1200}
               />
               
               {/* Highlight pattern area in volume chart too */}
@@ -433,16 +589,42 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
       
       {/* Pattern label if one is selected */}
       {selectedPattern && (
-        <div className={cn(
-          "mt-2 text-xs text-center py-1 rounded",
-          selectedPattern.signal === 'bullish' ? "bg-app-green/20 text-app-green" :
-          selectedPattern.signal === 'bearish' ? "bg-app-red/20 text-app-red" :
-          "bg-yellow-500/20 text-yellow-500"
-        )}>
-          {selectedPattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')} pattern detected
-          {selectedPattern.level ? ` (${selectedPattern.patternType.toLowerCase()} at $${selectedPattern.level.toFixed(2)})` : ''}
+        <div className="mt-3 px-3 py-2 border rounded bg-card/50">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Selected Pattern: </span>
+            <span className="font-medium">
+              {selectedPattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+            </span>
+            <span className={cn(
+              "ml-2 inline-block px-2 py-0.5 rounded-full text-xs",
+              selectedPattern.signal === 'bullish' ? "bg-app-green/20 text-app-green" :
+              selectedPattern.signal === 'bearish' ? "bg-app-red/20 text-app-red" :
+              "bg-yellow-500/20 text-yellow-500"
+            )}>
+              {selectedPattern.signal.charAt(0).toUpperCase() + selectedPattern.signal.slice(1)}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {selectedPattern.description}
+          </div>
         </div>
       )}
+      
+      {/* Add CSS animations */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 0.9; }
+        }
+        @keyframes growIn {
+          from { transform: scaleX(0); opacity: 0; }
+          to { transform: scaleX(1); opacity: 0.9; }
+        }
+        @keyframes growUp {
+          from { transform: scaleY(0); opacity: 0; }
+          to { transform: scaleY(1); opacity: 0.7; }
+        }
+      `}</style>
     </div>
   );
 };

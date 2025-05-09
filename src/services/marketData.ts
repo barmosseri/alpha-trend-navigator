@@ -28,14 +28,48 @@ const CRYPTO_COMPARE_API_KEY = '26d7b71f0f39e0a3d961c89e984eb494ec9bd964b947ad11
  */
 export const fetchAssetData = async (symbol: string, isStock = true): Promise<Asset | null> => {
   try {
-    // Different endpoint based on asset type
-    const function_name = isStock ? 'GLOBAL_QUOTE' : 'DIGITAL_CURRENCY_DAILY';
+    console.log(`Fetching data for ${symbol}, isStock: ${isStock}`);
+    
+    // First try to use the API
+    let asset = await fetchAlphaVantageData(symbol, isStock);
+    
+    // If API fails or returns null, fall back to scraping
+    if (!asset) {
+      console.log('API call failed, falling back to web scraping');
+      asset = await scrapeFinancialData(symbol, isStock);
+      if (asset) {
+        console.log('Successfully retrieved data via scraping');
+      }
+    }
+    
+    // If all methods fail, return null
+    if (!asset) {
+      console.error('All data fetching methods failed');
+      isUsingDemoData = true;
+      return null;
+    }
+    
+    isUsingDemoData = false;
+    return asset;
+  } catch (error) {
+    console.error('Error in fetchAssetData:', error);
+    isUsingDemoData = true;
+    return null;
+  }
+};
+
+/**
+ * Attempts to fetch asset data from Alpha Vantage API
+ */
+const fetchAlphaVantageData = async (symbol: string, isStock = true): Promise<Asset | null> => {
+  try {
+    const endpoint = isStock ? 'GLOBAL_QUOTE' : 'DIGITAL_CURRENCY_DAILY';
     
     const response = await axios.get(BASE_URL, {
       params: {
-        function: function_name,
+        function: endpoint,
         symbol: symbol,
-        market: 'USD', // Only needed for crypto
+        market: 'USD',
         apikey: API_KEY
       }
     });
@@ -91,14 +125,86 @@ export const fetchAssetData = async (symbol: string, isStock = true): Promise<As
       }
     }
     
-    // If we got here, the response format wasn't as expected - fall back to mock data
-    console.error('Could not parse API response format:', response.data);
-    isUsingDemoData = true;
-    return fallbackToMockAsset(symbol);
+    // If we got here, the response format wasn't as expected
+    console.error('Could not parse Alpha Vantage API response format:', response.data);
+    return null;
   } catch (error) {
-    console.error('Error fetching asset data:', error);
-    isUsingDemoData = true;
-    return fallbackToMockAsset(symbol);
+    console.error('Error fetching from Alpha Vantage:', error);
+    return null;
+  }
+};
+
+/**
+ * Scrapes financial data from public sources when APIs fail
+ */
+const scrapeFinancialData = async (symbol: string, isStock = true): Promise<Asset | null> => {
+  try {
+    // Target a public financial data source based on asset type
+    const url = isStock 
+      ? `https://finance.yahoo.com/quote/${symbol}`
+      : `https://finance.yahoo.com/quote/${symbol}-USD`;
+    
+    console.log(`Scraping data for ${symbol} from ${url}`);
+    
+    // In a real implementation, you would:
+    // 1. Make a GET request to the URL
+    // 2. Parse the HTML response
+    // 3. Extract price, change, volume etc. from specific HTML elements
+    
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    // This is a simplified implementation - in reality you would use a proper HTML parser
+    const html = response.data;
+    
+    // Basic regex patterns to extract data (note: this is fragile and would need more robust parsing)
+    const priceMatch = html.match(/"regularMarketPrice":{"raw":([\d\.]+)/);
+    const changePercentMatch = html.match(/"regularMarketChangePercent":{"raw":([-\d\.]+)/);
+    const volumeMatch = html.match(/"regularMarketVolume":{"raw":([\d\.]+)/);
+    const prevCloseMatch = html.match(/"regularMarketPreviousClose":{"raw":([\d\.]+)/);
+    
+    if (!priceMatch) {
+      throw new Error('Could not extract price from scraped content');
+    }
+    
+    const price = parseFloat(priceMatch[1]);
+    const changePercent = changePercentMatch ? parseFloat(changePercentMatch[1]) : 0;
+    const volume = volumeMatch ? parseInt(volumeMatch[1]) : 0;
+    const prevClose = prevCloseMatch ? parseFloat(prevCloseMatch[1]) : 0;
+    
+    // Generate a unique ID
+    const id = `${symbol.toLowerCase()}-${Date.now()}`;
+    
+    // Define recommendation based on change percent
+    let recommendation: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+    if (changePercent > 1.5) recommendation = 'BUY';
+    else if (changePercent < -1.5) recommendation = 'SELL';
+    
+    // Define trend based on change percent
+    let trend: 'RISING' | 'FALLING' | 'NEUTRAL' = 'NEUTRAL';
+    if (changePercent > 0) trend = 'RISING';
+    else if (changePercent < 0) trend = 'FALLING';
+    
+    return {
+      id,
+      name: symbol,
+      symbol,
+      price,
+      change: changePercent,
+      volume,
+      marketCap: price * volume,
+      type: isStock ? 'stock' : 'crypto',
+      recommendation,
+      trend,
+      rating: 5, // Default rating on a scale of 1-10
+      analysis: 'Analysis based on real-time market data'
+    };
+  } catch (error) {
+    console.error(`Scraping error for ${symbol}:`, error);
+    return null;
   }
 };
 
@@ -142,36 +248,29 @@ export const fetchCandlestickData = async (
   timeframe: '30d' | '90d' | '1y' = '90d'
 ): Promise<CandlestickData[]> => {
   try {
-    // If it's a crypto, still use Alpha Vantage
-    if (!isStock) {
-      return fetchAlphaVantageCandlestickData(symbol, false, timeframe);
+    // Try Alpha Vantage first
+    const alphaVantageData = await fetchAlphaVantageCandlestickData(symbol, isStock, timeframe);
+    if (alphaVantageData.length > 0) {
+      return alphaVantageData;
     }
     
-    // For stocks, use Stooq data
-    // Format the symbol for Stooq (e.g. AAPL.US)
-    const formattedSymbol = formatSymbolForStooq(symbol);
+    // If Alpha Vantage fails, try scraping alternatives
+    console.log('Alpha Vantage candlestick data failed, trying alternative sources...');
+    const scrapedCandlestickData = await scrapeCandlestickData(symbol, isStock, timeframe);
+    if (scrapedCandlestickData.length > 0) {
+      return scrapedCandlestickData;
+    }
     
-    // Determine the period based on timeframe
-    const days = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+    // As a last resort, use mock data
+    console.log('No real candlestick data available, falling back to demo data');
+    isUsingDemoData = true;
     
-    const response = await axios.get(STOOQ_BASE_URL, {
-      params: {
-        s: formattedSymbol,
-        i: 'd', // daily data
-        d1: calculateStartDate(days),
-        d2: formatDate(new Date()), // today
-        f: 'csv', // CSV format
-      },
-      responseType: 'text'
-    });
-    
-    const candlestickData = parseStooqCSV(response.data);
-    
-    return candlestickData;
+    // Generate mock candlestick data based on the symbol
+    return generateMockCandlestickData(symbol, timeframe);
   } catch (error) {
-    console.error('Error fetching candlestick data from Stooq:', error);
-    // Fallback to Alpha Vantage if Stooq fails
-    return fetchAlphaVantageCandlestickData(symbol, isStock, timeframe);
+    console.error('Error fetching candlestick data:', error);
+    isUsingDemoData = true;
+    return generateMockCandlestickData(symbol, timeframe);
   }
 };
 
@@ -630,5 +729,195 @@ const generateAnalysisText = (asset: Asset, momentum: number, volatility: number
         ? 'Technical indicators suggest it might be wise to reduce exposure.'
         : 'Technical indicators suggest maintaining current positions.'
   }`;
+};
+
+/**
+ * Scrapes candlestick data from alternative sources
+ */
+const scrapeCandlestickData = async (
+  symbol: string,
+  isStock = true,
+  timeframe: '30d' | '90d' | '1y' = '90d'
+): Promise<CandlestickData[]> => {
+  try {
+    const daysToFetch = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+    
+    if (isStock) {
+      // Use Yahoo Finance for stocks
+      const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+        params: {
+          interval: '1d',
+          range: timeframe === '30d' ? '1mo' : timeframe === '90d' ? '3mo' : '1y'
+        }
+      });
+      
+      if (response.data && response.data.chart && response.data.chart.result) {
+        const result = response.data.chart.result[0];
+        const timestamps = result.timestamp || [];
+        const quote = result.indicators.quote[0];
+        
+        const candlestickData: CandlestickData[] = [];
+        
+        for (let i = 0; i < timestamps.length; i++) {
+          // Skip entries with missing data
+          if (!quote.open[i] || !quote.high[i] || !quote.low[i] || !quote.close[i]) {
+            continue;
+          }
+          
+          // Convert timestamp to date
+          const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+          
+          candlestickData.push({
+            date: date,
+            open: quote.open[i],
+            high: quote.high[i],
+            low: quote.low[i],
+            close: quote.close[i],
+            volume: quote.volume[i] || 0
+          });
+        }
+        
+        console.log(`Successfully scraped Yahoo Finance chart data for ${symbol} (${candlestickData.length} candles)`);
+        return candlestickData;
+      }
+    } else {
+      // For crypto, use CryptoCompare
+      const response = await axios.get(`${CRYPTO_COMPARE_URL}/v2/histoday`, {
+        params: {
+          fsym: symbol,
+          tsym: 'USD',
+          limit: daysToFetch,
+          api_key: CRYPTO_COMPARE_API_KEY
+        }
+      });
+      
+      if (response.data && response.data.Data && response.data.Data.Data) {
+        const historyData = response.data.Data.Data;
+        const candlestickData: CandlestickData[] = [];
+        
+        for (const data of historyData) {
+          // Convert timestamp to date
+          const date = new Date(data.time * 1000).toISOString().split('T')[0];
+          
+          candlestickData.push({
+            date: date,
+            open: data.open,
+            high: data.high,
+            low: data.low,
+            close: data.close,
+            volume: data.volumefrom || 0
+          });
+        }
+        
+        console.log(`Successfully scraped CryptoCompare chart data for ${symbol} (${candlestickData.length} candles)`);
+        return candlestickData;
+      }
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error scraping candlestick data:', error);
+    return [];
+  }
+};
+
+/**
+ * Helper function to generate mock candlestick data based on a symbol
+ */
+const generateMockCandlestickData = (symbol: string, timeframe: '30d' | '90d' | '1y' = '90d'): CandlestickData[] => {
+  console.log(`Generating mock candlestick data for ${symbol}`);
+  isUsingDemoData = true;
+  
+  const days = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+  const candlestickData: CandlestickData[] = [];
+  
+  // Starting price - use the symbol characters to generate a deterministic starting point
+  const symbolSum = symbol.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  let basePrice = (symbolSum % 1000) + 50; // Between 50 and 1050
+  
+  // Volatility - some symbols should be more volatile
+  const volatility = (symbolSum % 10) / 100 + 0.01; // Between 0.01 and 0.11
+  
+  const today = new Date();
+  
+  for (let i = days; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    
+    // Introduce some randomness but with a trend
+    const trend = Math.sin(i / 15) * volatility * 5;
+    const dailyChange = (Math.random() - 0.5) * volatility * basePrice + trend;
+    
+    // Don't let price go below 1
+    basePrice = Math.max(1, basePrice + dailyChange);
+    
+    // Calculate high and low with some randomness
+    const amplitude = basePrice * volatility * (Math.random() + 0.5);
+    const high = basePrice + amplitude / 2;
+    const low = Math.max(1, basePrice - amplitude / 2);
+    
+    // Open and close 
+    const open = low + Math.random() * (high - low);
+    const close = low + Math.random() * (high - low);
+    
+    // Volume with some randomness
+    const volume = Math.round(basePrice * 10000 * (0.5 + Math.random()));
+    
+    candlestickData.push({
+      date: date.toISOString().split('T')[0],
+      open,
+      high,
+      low,
+      close,
+      volume
+    });
+  }
+  
+  return candlestickData;
+};
+
+/**
+ * Scrapes historical candlestick data when API access is not available
+ */
+export const scrapeHistoricalData = async (symbol: string, isStock = true): Promise<CandlestickData[]> => {
+  try {
+    // Target URL for historical data
+    const url = isStock 
+      ? `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`
+      : `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}-USD?interval=1d&range=3mo`;
+    
+    console.log(`Scraping historical data for ${symbol} from ${url}`);
+    
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    const data = response.data;
+    const quotes = data.chart.result[0].indicators.quote[0];
+    const timestamps = data.chart.result[0].timestamp;
+    
+    if (!quotes || !timestamps) {
+      throw new Error('Invalid response format for historical data');
+    }
+    
+    return timestamps.map((timestamp: number, index: number) => {
+      const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+      return {
+        date,
+        open: quotes.open[index] || 0,
+        high: quotes.high[index] || 0,
+        low: quotes.low[index] || 0,
+        close: quotes.close[index] || 0,
+        volume: quotes.volume[index] || 0
+      };
+    }).filter((candle: CandlestickData) => 
+      candle.open && candle.high && candle.low && candle.close
+    );
+  } catch (error) {
+    console.error(`Error scraping historical data for ${symbol}:`, error);
+    return [];
+  }
 };
 
