@@ -126,7 +126,7 @@ const CandlestickChart = ({
     const { x, y, width, height, open, close, isRealTime } = props;
     
     const isRising = close >= open;
-    const color = isRising ? "var(--app-green)" : "var(--app-red)";
+    const color = isRising ? "#33b894" : "#ea384c"; // Using green/red from the image
     const className = isRising ? "up" : "down";
     
     // Add a subtle glow effect to real-time data
@@ -213,12 +213,30 @@ const CandlestickChart = ({
               <>
                 <Line
                   type="monotone"
+                  dataKey="sma10"
+                  yAxisId="price"
+                  stroke="#e91e63" // Pink line for SMA10
+                  dot={false}
+                  name="SMA(10)"
+                  strokeWidth={1}
+                />
+                <Line
+                  type="monotone"
                   dataKey="sma20"
                   yAxisId="price"
-                  stroke="#FFFFFF"
+                  stroke="#FFFFFF" // White line for SMA20 (previously SMA30)
                   dot={false}
                   name="SMA(20)"
-                  strokeWidth={2}
+                  strokeWidth={1}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sma50"
+                  yAxisId="price"
+                  stroke="#ff9800" // Orange line for SMA50
+                  dot={false}
+                  name="SMA(50)"
+                  strokeWidth={1}
                 />
               </>
             )}
@@ -276,3 +294,4 @@ const CandlestickChart = ({
 };
 
 export default CandlestickChart;
+

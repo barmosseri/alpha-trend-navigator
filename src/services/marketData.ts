@@ -7,6 +7,8 @@ const API_KEY = 'demo'; // Replace with your Alpha Vantage API key
 
 // Alpha Vantage API base URL
 const BASE_URL = 'https://www.alphavantage.co/query';
+// Stooq API URL for historical data CSV format
+const STOOQ_BASE_URL = 'https://stooq.com/q/d/l';
 
 /**
  * Fetches stock or crypto data from Alpha Vantage API
@@ -85,10 +87,52 @@ export const fetchAssetData = async (symbol: string, isStock = true): Promise<As
 };
 
 /**
- * Fetches candlestick data for the given asset
+ * Fetches candlestick data from Stooq for the given asset
  */
 export const fetchCandlestickData = async (
   symbol: string, 
+  isStock = true,
+  timeframe: '30d' | '90d' | '1y' = '90d'
+): Promise<CandlestickData[]> => {
+  try {
+    // If it's a crypto, still use Alpha Vantage
+    if (!isStock) {
+      return fetchAlphaVantageCandlestickData(symbol, false, timeframe);
+    }
+    
+    // For stocks, use Stooq data
+    // Format the symbol for Stooq (e.g. AAPL.US)
+    const formattedSymbol = formatSymbolForStooq(symbol);
+    
+    // Determine the period based on timeframe
+    const days = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+    
+    const response = await axios.get(STOOQ_BASE_URL, {
+      params: {
+        s: formattedSymbol,
+        i: 'd', // daily data
+        d1: calculateStartDate(days),
+        d2: formatDate(new Date()), // today
+        f: 'csv', // CSV format
+      },
+      responseType: 'text'
+    });
+    
+    const candlestickData = parseStooqCSV(response.data);
+    
+    return candlestickData;
+  } catch (error) {
+    console.error('Error fetching candlestick data from Stooq:', error);
+    // Fallback to Alpha Vantage if Stooq fails
+    return fetchAlphaVantageCandlestickData(symbol, isStock, timeframe);
+  }
+};
+
+/**
+ * Fallback function to fetch candlestick data from Alpha Vantage
+ */
+const fetchAlphaVantageCandlestickData = async (
+  symbol: string,
   isStock = true,
   timeframe: '30d' | '90d' | '1y' = '90d'
 ): Promise<CandlestickData[]> => {
@@ -149,9 +193,69 @@ export const fetchCandlestickData = async (
     
     return candlestickData.reverse(); // Sort chronologically
   } catch (error) {
-    console.error('Error fetching candlestick data:', error);
+    console.error('Error fetching candlestick data from Alpha Vantage:', error);
     return [];
   }
+};
+
+/**
+ * Parse Stooq CSV response into candlestick data
+ */
+const parseStooqCSV = (csv: string): CandlestickData[] => {
+  const lines = csv.split('\n');
+  const candlestickData: CandlestickData[] = [];
+  
+  // Skip header line and process the rest
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const values = line.split(',');
+    if (values.length < 6) continue;
+    
+    const [date, open, high, low, close, volume] = values;
+    
+    candlestickData.push({
+      date,
+      open: parseFloat(open),
+      high: parseFloat(high),
+      low: parseFloat(low),
+      close: parseFloat(close),
+      volume: parseFloat(volume)
+    });
+  }
+  
+  return candlestickData;
+};
+
+/**
+ * Format symbol for Stooq API (e.g. AAPL -> AAPL.US)
+ */
+const formatSymbolForStooq = (symbol: string): string => {
+  // Map common stock exchanges
+  if (symbol.includes('.')) return symbol; // Already has an exchange
+  
+  // Default to US market
+  return `${symbol}.US`;
+};
+
+/**
+ * Calculate start date for historical data
+ */
+const calculateStartDate = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return formatDate(date);
+};
+
+/**
+ * Format date to YYYY-MM-DD for API
+ */
+const formatDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
@@ -171,13 +275,13 @@ export const generateSMAData = (candlestickData: CandlestickData[]): SMAData[] =
   const closes = candlestickData.map(d => d.close);
   const smaData: SMAData[] = [];
   
-  // Adjust to use SMA 20 to match image (instead of 30)
-  const periods = [10, 30, 50];
+  // Use SMA 20 instead of 30 to match the image
+  const periods = [10, 20, 50];
   const minPeriod = Math.min(...periods);
   
   candlestickData.forEach((candle, index) => {
     const sma10 = calculateSMA(closes, 10, index);
-    const sma30 = calculateSMA(closes, 30, index);
+    const sma30 = calculateSMA(closes, 20, index); // Now 20 instead of 30
     const sma50 = calculateSMA(closes, 50, index);
     
     if (index >= minPeriod - 1) {
@@ -282,3 +386,4 @@ export const searchAssets = async (query: string): Promise<Asset[]> => {
     return [];
   }
 };
+
