@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAssets } from '@/contexts/AssetsContext';
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockAssets, generateMockCandlestickData, generateMockSMAData } from '@/lib/mockData'; // Import directly instead of using require
+import { mockAssets, generateMockCandlestickData, generateMockSMAData } from '@/lib/mockData';
 import { toast } from '@/components/ui/use-toast';
 
 const AssetDetail = () => {
@@ -104,11 +105,11 @@ const AssetDetail = () => {
           variant: "destructive"
         });
         
-        // Use mock data as fallback - import directly instead of using require
+        // Use mock data as fallback (use direct imports instead of require)
         const mockData = generateMockCandlestickData(asset.id, timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365);
         setCandlestickData(mockData);
-        const sma = generateMockSMAData(mockData);
-        setSmaData(sma);
+        const mockSMA = generateMockSMAData(mockData);
+        setSmaData(mockSMA);
       }
     };
     
@@ -184,7 +185,9 @@ const AssetDetail = () => {
         <Card className="lg:col-span-3">
           <CardHeader className="pb-0">
             <div className="flex justify-between items-center">
-              <CardTitle>Price Chart</CardTitle>
+              <CardTitle>
+                {asset.symbol} {asset.type === 'stock' ? 'AI Powered Stock Chart' : 'AI Powered Crypto Chart'}
+              </CardTitle>
               <div className="flex gap-1">
                 <Button 
                   variant={timeframe === '30d' ? 'secondary' : 'ghost'} 
@@ -212,12 +215,24 @@ const AssetDetail = () => {
           </CardHeader>
           <CardContent className="pt-4">
             {candlestickData.length > 0 ? (
-              <CandlestickChart 
-                candlestickData={candlestickData} 
-                smaData={smaData}
-                showSMA={true}
-                showVolume={true}
-              />
+              <>
+                <div className="text-sm text-muted-foreground mb-2">
+                  {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {' '}
+                  <span className="bg-[#9b87f5] px-1 rounded-sm text-white">
+                    {asset.symbol}:
+                  </span> 
+                  {' '}
+                  O: ${asset.price.toFixed(2)}; H: ${(asset.price * 1.01).toFixed(2)}; 
+                  L: ${(asset.price * 0.99).toFixed(2)}; C: ${asset.price.toFixed(2)}
+                </div>
+                <CandlestickChart 
+                  candlestickData={candlestickData} 
+                  smaData={smaData}
+                  showSMA={true}
+                  showVolume={true}
+                />
+              </>
             ) : (
               <div className="h-[400px] flex items-center justify-center">
                 <div className="text-center">

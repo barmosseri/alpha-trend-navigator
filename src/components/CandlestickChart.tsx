@@ -10,7 +10,8 @@ import {
   Tooltip,
   Line,
   Legend,
-  ReferenceLine
+  ReferenceLine,
+  Label
 } from 'recharts';
 import { CandlestickData, SMAData } from '@/lib/types';
 
@@ -29,7 +30,7 @@ interface CombinedData {
   low: number;
   volume?: number;
   sma10?: number;
-  sma30?: number;
+  sma20?: number;
   sma50?: number;
   isRealTime?: boolean;
 }
@@ -61,7 +62,8 @@ const CandlestickChart = ({
         low: candle.low,
         volume: showVolume ? candle.volume : undefined,
         sma10: showSMA && matchingSMA ? matchingSMA.sma10 : undefined,
-        sma30: showSMA && matchingSMA ? matchingSMA.sma30 : undefined,
+        // Use sma20 instead of sma30 to match the image
+        sma20: showSMA && matchingSMA ? matchingSMA.sma30 : undefined,
         sma50: showSMA && matchingSMA ? matchingSMA.sma50 : undefined,
         isRealTime,
       };
@@ -73,7 +75,13 @@ const CandlestickChart = ({
     const min = Math.min(...lows);
     const max = Math.max(...highs);
     
-    setDataRange({min, max});
+    // Calculate rounded values for better visual representation
+    const range = max - min;
+    const step = Math.pow(10, Math.floor(Math.log10(range)));
+    const roundedMin = Math.floor(min / step) * step;
+    const roundedMax = Math.ceil(max / step) * step;
+    
+    setDataRange({min: roundedMin, max: roundedMax});
     setCombinedData(combined);
   }, [candlestickData, smaData, showVolume, showSMA]);
   
@@ -87,6 +95,33 @@ const CandlestickChart = ({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
   };
   
+  // Format the domain for Y-axis based on data range
+  const formatYAxis = (): [number, number] => {
+    if (!dataRange.min || !dataRange.max) return [0, 100];
+    
+    const range = dataRange.max - dataRange.min;
+    const padding = range * 0.1;
+    return [dataRange.min - padding, dataRange.max + padding];
+  };
+  
+  // Find significant price levels (support/resistance) for horizontal lines
+  const findKeyLevels = (): number[] => {
+    if (combinedData.length < 30 || !dataRange.max || !dataRange.min) return [];
+    
+    const range = dataRange.max - dataRange.min;
+    const step = range / 4;
+    
+    // Create evenly spaced levels
+    return [
+      dataRange.min + step,
+      dataRange.min + step * 2,
+      dataRange.min + step * 3
+    ];
+  };
+  
+  const keyLevels = findKeyLevels();
+
+  // Custom renderer for candlestick bars
   const renderCandlestickBar = (props: any) => {
     const { x, y, width, height, open, close, isRealTime } = props;
     
@@ -121,124 +156,121 @@ const CandlestickChart = ({
     );
   };
 
-  // Format the domain for Y-axis
-  const formatYAxis = (): [number, number] => {
-    if (!dataRange.min || !dataRange.max) return [0, 100];
-    
-    const range = dataRange.max - dataRange.min;
-    const padding = range * 0.1;
-    return [dataRange.min - padding, dataRange.max + padding];
-  };
-  
-  // Find significant price levels (support/resistance)
-  const findKeyLevels = (): number[] => {
-    if (combinedData.length < 30) return [];
-    
-    // Simple algorithm to find price clusters
-    const closes = combinedData.map(d => d.close);
-    const sorted = [...closes].sort((a, b) => a - b);
-    
-    // Take a few levels at evenly spaced percentiles
-    const levels = [];
-    const step = Math.floor(sorted.length / 4);
-    
-    for (let i = 1; i < 4; i++) {
-      levels.push(sorted[i * step]);
-    }
-    
-    return levels;
-  };
-  
-  const keyLevels = findKeyLevels();
-
   return (
-    <div className="w-full h-[400px] candlestick-chart">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={combinedData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis 
-            dataKey="date" 
-            tickFormatter={formatDate}
-            minTickGap={50}
-          />
-          <YAxis 
-            yAxisId="price" 
-            domain={formatYAxis}
-            tickFormatter={formatTooltip}
-          />
-          {showVolume && (
+    <div className="w-full flex flex-col">
+      {/* Main Price Chart */}
+      <div className="h-[350px] bg-[#1A1F2C] mb-1 rounded-t-lg">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={combinedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+            <XAxis 
+              dataKey="date" 
+              tickFormatter={formatDate}
+              minTickGap={50}
+              stroke="#8E9196"
+              tick={{ fill: '#8E9196' }}
+              axisLine={{ stroke: '#333' }}
+              hide={true}
+            />
             <YAxis 
-              yAxisId="volume" 
-              orientation="right" 
-              tickFormatter={(tick) => `${(tick / 1000000).toFixed(0)}M`}
+              yAxisId="price" 
+              domain={formatYAxis}
+              tickFormatter={formatTooltip}
+              orientation="right"
+              stroke="#8E9196"
+              tick={{ fill: '#8E9196' }}
+              axisLine={{ stroke: '#333' }}
             />
-          )}
-          <Tooltip
-            formatter={formatTooltip}
-            labelFormatter={(label) => `Date: ${formatDate(label.toString())}`}
-          />
-          <Legend />
-          
-          {/* Key price levels (support/resistance) */}
-          {keyLevels.map((level, index) => (
-            <ReferenceLine 
-              key={`level-${index}`}
-              y={level} 
-              yAxisId="price"
-              stroke="#888" 
-              strokeDasharray="3 3"
-              strokeOpacity={0.6}
+            <Tooltip
+              formatter={formatTooltip}
+              labelFormatter={(label) => `Date: ${formatDate(label.toString())}`}
+              contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#333', color: '#fff' }}
+              labelStyle={{ color: '#8E9196' }}
             />
-          ))}
-          
-          <Bar
-            dataKey="high"
-            yAxisId="price"
-            shape={renderCandlestickBar}
-            name="Price"
-          />
-          {showVolume && (
+            
+            {/* Support/Resistance Lines */}
+            {keyLevels.map((level, index) => (
+              <ReferenceLine 
+                key={`level-${index}`}
+                y={level} 
+                yAxisId="price"
+                stroke="#38775F" 
+                strokeDasharray="3 3"
+                strokeOpacity={0.6}
+              />
+            ))}
+            
+            {/* Candlestick Data */}
             <Bar
-              dataKey="volume"
-              yAxisId="volume"
-              fill="#8884d8"
-              opacity={0.3}
-              name="Volume"
+              dataKey="high"
+              yAxisId="price"
+              shape={renderCandlestickBar}
+              name="Price"
             />
-          )}
-          {showSMA && (
-            <>
-              <Line
-                type="monotone"
-                dataKey="sma10"
-                yAxisId="price"
-                stroke="#38BDF8"
-                dot={false}
-                name="SMA 10"
-                className="sma10"
+            
+            {/* SMA Lines */}
+            {showSMA && (
+              <>
+                <Line
+                  type="monotone"
+                  dataKey="sma20"
+                  yAxisId="price"
+                  stroke="#FFFFFF"
+                  dot={false}
+                  name="SMA(20)"
+                  strokeWidth={2}
+                />
+              </>
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      
+      {/* Volume Chart Below */}
+      {showVolume && (
+        <div className="h-[100px] bg-[#1A1F2C] rounded-b-lg">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={combinedData} margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis 
+                dataKey="date" 
+                tickFormatter={formatDate}
+                stroke="#8E9196"
+                tick={{ fill: '#8E9196' }}
+                axisLine={{ stroke: '#333' }}
               />
-              <Line
-                type="monotone"
-                dataKey="sma30"
-                yAxisId="price"
-                stroke="#A855F7"
-                dot={false}
-                name="SMA 30"
-                className="sma30"
+              <YAxis 
+                yAxisId="volume" 
+                orientation="right" 
+                tickFormatter={(tick) => `${(tick / 1000000).toFixed(0)}M`}
+                stroke="#8E9196"
+                tick={{ fill: '#8E9196' }}
+                axisLine={{ stroke: '#333' }}
               />
-              <Line
-                type="monotone"
-                dataKey="sma50"
-                yAxisId="price"
-                stroke="#F97316"
-                dot={false}
-                name="SMA 50"
-                className="sma50"
+              <Tooltip
+                formatter={(value: any) => [`${(value / 1000000).toFixed(2)}M`, 'Volume']}
+                labelFormatter={(label) => formatDate(label.toString())}
+                contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#333', color: '#fff' }}
+                labelStyle={{ color: '#8E9196' }}
               />
-            </>
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+              <Legend content={() => (
+                <div style={{ color: '#8E9196', textAlign: 'center', padding: '4px', fontSize: '12px' }}>
+                  Volume
+                </div>
+              )} />
+              
+              {/* Volume Bars */}
+              <Bar
+                dataKey="volume"
+                yAxisId="volume"
+                fill="#9b87f5"
+                opacity={0.8}
+                name="Volume"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 };

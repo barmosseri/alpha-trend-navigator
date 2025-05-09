@@ -171,12 +171,16 @@ export const generateSMAData = (candlestickData: CandlestickData[]): SMAData[] =
   const closes = candlestickData.map(d => d.close);
   const smaData: SMAData[] = [];
   
+  // Adjust to use SMA 20 to match image (instead of 30)
+  const periods = [10, 30, 50];
+  const minPeriod = Math.min(...periods);
+  
   candlestickData.forEach((candle, index) => {
     const sma10 = calculateSMA(closes, 10, index);
     const sma30 = calculateSMA(closes, 30, index);
     const sma50 = calculateSMA(closes, 50, index);
     
-    if (index >= 49) { // Only add when all SMAs are available
+    if (index >= minPeriod - 1) {
       smaData.push({
         date: candle.date,
         sma10,
