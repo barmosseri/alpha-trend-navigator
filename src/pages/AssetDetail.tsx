@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAssets } from '@/contexts/AssetsContext';
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockAssets } from '@/lib/mockData'; // We'll fallback to mock data if API fails
+import { mockAssets, generateMockCandlestickData, generateMockSMAData } from '@/lib/mockData'; // Import directly instead of using require
 import { toast } from '@/components/ui/use-toast';
 
 const AssetDetail = () => {
@@ -104,7 +105,7 @@ const AssetDetail = () => {
           variant: "destructive"
         });
         
-        // Use mock data as fallback
+        // Use mock data as fallback - import directly instead of using require
         const mockData = generateMockCandlestickData(asset.id, timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365);
         setCandlestickData(mockData);
         const sma = generateMockSMAData(mockData);
