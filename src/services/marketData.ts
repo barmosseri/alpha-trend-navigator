@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 import { Asset, CandlestickData, SMAData, TrendingAsset } from '@/lib/types';
 
@@ -9,6 +8,16 @@ const API_KEY = 'demo'; // Replace with your Alpha Vantage API key
 const BASE_URL = 'https://www.alphavantage.co/query';
 // Stooq API URL for historical data CSV format
 const STOOQ_BASE_URL = 'https://stooq.com/q/d/l';
+
+// Additional API base URLs
+const FINANCIAL_MODELING_PREP_URL = 'https://financialmodelingprep.com/api/v3';
+const NEWS_API_URL = 'https://newsapi.org/v2';
+const CRYPTO_COMPARE_URL = 'https://min-api.cryptocompare.com/data';
+
+// Add your API keys here (in a real app, these would be environment variables)
+const FMP_API_KEY = 'demo';
+const NEWS_API_KEY = 'demo';
+const CRYPTO_COMPARE_API_KEY = 'demo';
 
 /**
  * Fetches stock or crypto data from Alpha Vantage API
@@ -385,5 +394,194 @@ export const searchAssets = async (query: string): Promise<Asset[]> => {
     console.error('Error searching assets:', error);
     return [];
   }
+};
+
+/**
+ * Fetches financial news for a specific asset
+ */
+export const fetchAssetNews = async (symbol: string): Promise<any[]> => {
+  try {
+    const response = await axios.get(`${NEWS_API_URL}/everything`, {
+      params: {
+        q: symbol,
+        language: 'en',
+        sortBy: 'publishedAt',
+        pageSize: 10,
+        apiKey: NEWS_API_KEY
+      }
+    });
+    
+    if (response.data.articles) {
+      return response.data.articles.map((article: any) => ({
+        title: article.title,
+        source: article.source.name,
+        url: article.url,
+        publishedAt: article.publishedAt,
+        sentiment: analyzeSentiment(article.title), // We'll implement this function
+      }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching news:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetches financial ratios and metrics for a stock
+ */
+export const fetchFinancialMetrics = async (symbol: string): Promise<any> => {
+  try {
+    const response = await axios.get(`${FINANCIAL_MODELING_PREP_URL}/ratios/${symbol}`, {
+      params: {
+        apikey: FMP_API_KEY
+      }
+    });
+    
+    if (response.data && response.data.length > 0) {
+      return response.data[0];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching financial metrics:', error);
+    return null;
+  }
+};
+
+/**
+ * Analyzes sentiment of text (simple implementation)
+ * In a real app, this would use a proper NLP model
+ */
+const analyzeSentiment = (text: string): 'positive' | 'negative' | 'neutral' => {
+  const positiveWords = ['surge', 'gain', 'rise', 'up', 'grow', 'improve', 'bullish', 'outperform'];
+  const negativeWords = ['drop', 'fall', 'decline', 'down', 'crash', 'bearish', 'underperform'];
+  
+  const lowerText = text.toLowerCase();
+  
+  let positiveScore = positiveWords.filter(word => lowerText.includes(word)).length;
+  let negativeScore = negativeWords.filter(word => lowerText.includes(word)).length;
+  
+  if (positiveScore > negativeScore) return 'positive';
+  if (negativeScore > positiveScore) return 'negative';
+  return 'neutral';
+};
+
+/**
+ * Fetches on-chain data for cryptocurrencies
+ */
+export const fetchOnChainData = async (symbol: string): Promise<any> => {
+  if (symbol !== 'BTC' && symbol !== 'ETH') return null;
+  
+  try {
+    const endpoint = symbol === 'BTC' ? 'blockchain/latest' : 'stats';
+    const response = await axios.get(`${CRYPTO_COMPARE_URL}/${endpoint}`, {
+      params: {
+        fsym: symbol,
+        tsym: 'USD',
+        api_key: CRYPTO_COMPARE_API_KEY
+      }
+    });
+    
+    if (response.data) {
+      return response.data;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching on-chain data:', error);
+    return null;
+  }
+};
+
+/**
+ * Augments asset data with AI-powered analysis and prediction
+ */
+export const generateAIAnalysis = (asset: Asset, candlestickData: CandlestickData[]): Asset => {
+  // Extract recent price data
+  const recentPrices = candlestickData.slice(-30).map(d => d.close);
+  
+  // Calculate simple momentum
+  const momentum = calculateMomentum(recentPrices);
+  
+  // Calculate volatility
+  const volatility = calculateVolatility(recentPrices);
+  
+  // Determine trend strength (1-10)
+  const trendStrength = Math.min(10, Math.max(1, Math.round((Math.abs(momentum) / 0.01) * (1 - volatility / 0.2))));
+  
+  // Generate rating (1-10)
+  let rating = 5; // Neutral starting point
+  
+  if (momentum > 0) {
+    // Positive momentum
+    rating = Math.min(10, 5 + Math.round(trendStrength / 2));
+  } else {
+    // Negative momentum
+    rating = Math.max(1, 5 - Math.round(trendStrength / 2));
+  }
+  
+  // Generate recommendation
+  let recommendation: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+  if (rating >= 7) recommendation = 'BUY';
+  if (rating <= 3) recommendation = 'SELL';
+  
+  // Generate analysis text
+  const analysisText = generateAnalysisText(asset, momentum, volatility, trendStrength);
+  
+  return {
+    ...asset,
+    rating,
+    trend: momentum > 0 ? 'RISING' : 'FALLING',
+    analysis: analysisText,
+    recommendation
+  };
+};
+
+/**
+ * Calculates price momentum (percentage change)
+ */
+const calculateMomentum = (prices: number[]): number => {
+  if (prices.length < 10) return 0;
+  
+  const recent = prices.slice(-5);
+  const earlier = prices.slice(-10, -5);
+  
+  const recentAvg = recent.reduce((sum, price) => sum + price, 0) / recent.length;
+  const earlierAvg = earlier.reduce((sum, price) => sum + price, 0) / earlier.length;
+  
+  return (recentAvg - earlierAvg) / earlierAvg;
+};
+
+/**
+ * Calculates price volatility
+ */
+const calculateVolatility = (prices: number[]): number => {
+  if (prices.length < 2) return 0;
+  
+  const changes = [];
+  for (let i = 1; i < prices.length; i++) {
+    changes.push(Math.abs((prices[i] - prices[i-1]) / prices[i-1]));
+  }
+  
+  return changes.reduce((sum, change) => sum + change, 0) / changes.length;
+};
+
+/**
+ * Generates analysis text based on calculated metrics
+ */
+const generateAnalysisText = (asset: Asset, momentum: number, volatility: number, trendStrength: number): string => {
+  const direction = momentum > 0 ? 'positive' : 'negative';
+  const strength = trendStrength >= 7 ? 'strong' : trendStrength >= 4 ? 'moderate' : 'weak';
+  const volatilityLevel = volatility > 0.03 ? 'high' : volatility > 0.01 ? 'moderate' : 'low';
+  
+  return `${asset.name} is showing a ${strength} ${direction} trend with ${volatilityLevel} volatility. ${
+    asset.recommendation === 'BUY' 
+      ? 'Technical indicators suggest this could be a good buying opportunity.'
+      : asset.recommendation === 'SELL'
+        ? 'Technical indicators suggest it might be wise to reduce exposure.'
+        : 'Technical indicators suggest maintaining current positions.'
+  }`;
 };
 
