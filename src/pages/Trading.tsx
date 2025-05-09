@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { trendingAssets } from '@/lib/mockData';
@@ -6,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAssets } from '@/contexts/AssetsContext';
+import AssetCard from '@/components/AssetCard';
 
 const Trading = () => {
   const { assets, addToWatchlist } = useAssets();
