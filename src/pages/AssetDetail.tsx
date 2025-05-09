@@ -58,20 +58,21 @@ const AssetDetail = () => {
       setIsLoading(true);
 
       try {
-        // Try to find in already loaded assets
-        const cachedAsset = assets.find(a => a.id === id);
-        if (cachedAsset) {
-          setAsset(cachedAsset);
+        // Try to fetch from API first
+        const symbol = id;
+        const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
+        const fetchedAsset = await fetchAssetData(symbol, isStock);
+        
+        if (fetchedAsset) {
+          setAsset(fetchedAsset);
         } else {
-          // If not found, try to fetch from API
-          const symbol = id;
-          const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
-          const fetchedAsset = await fetchAssetData(symbol, isStock);
-          
-          if (fetchedAsset) {
-            setAsset(fetchedAsset);
+          // Only as a last resort, check in already loaded assets
+          const cachedAsset = assets.find(a => a.id === id);
+          if (cachedAsset) {
+            setAsset(cachedAsset);
+            console.log('Using cached asset data for', id);
           } else {
-            throw new Error('Could not fetch real asset data');
+            throw new Error('Could not fetch asset data');
           }
         }
       } catch (error) {
@@ -81,7 +82,6 @@ const AssetDetail = () => {
           description: "Failed to load real asset data. Please check your API keys and connection.",
           variant: "destructive"
         });
-        setIsLoading(false);
       } finally {
         setIsLoading(false);
       }
@@ -96,21 +96,25 @@ const AssetDetail = () => {
     
     const loadChartData = async () => {
       try {
-        // Use our new combined data source function
+        // Use our combined data source function for the most reliable data
         const isStock = asset.type === 'stock';
         const symbol = asset.symbol;
         
-        // First try the multi-source data
+        console.log('Fetching chart data for', symbol, isStock);
+        
+        // Try to get combined data from multiple sources first
         const combinedData = await combineHistoricalData(symbol, isStock);
         
         if (combinedData.length > 0) {
+          console.log('Using combined historical data from real sources');
           // Filter based on selected timeframe
           const filteredData = filterCandlesticksByTimeframe(combinedData, timeframe);
           setCandlestickData(filteredData);
           const sma = generateSMAData(filteredData);
           setSmaData(sma);
         } else {
-          // Fall back to original implementation if no data
+          console.log('Falling back to Alpha Vantage data');
+          // Try Alpha Vantage as a second option
           const data = await fetchCandlestickData(symbol, isStock, timeframe);
         
           if (data.length > 0) {

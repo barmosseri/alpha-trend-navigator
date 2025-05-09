@@ -26,8 +26,8 @@ const Settings = () => {
     autoSellEnabled: false,
     riskLevel: 'medium',
     apiKeys: {
-      finnhub: 'd0etbjpr01qsrhcnqle0d0etbjpr01qsrhcnqleg',
-      alphaVantage: 'demo'
+      finnhub: 'd0etbjpr01qsrhcnqle0',
+      alphaVantage: 'PM0MHLNXNSCGBM5K'
     }
   });
   

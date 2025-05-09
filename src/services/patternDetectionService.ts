@@ -2,7 +2,7 @@ import axios from 'axios';
 import { CandlestickData, PatternResult, PatternType, Asset } from '@/lib/types';
 
 // APIs
-const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || 'YOUR_FINNHUB_API_KEY';
+const FINNHUB_API_KEY = 'd0etbjpr01qsrhcnqle0';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const STOOQ_BASE_URL = 'https://stooq.com/q/d/l';
 
@@ -776,22 +776,32 @@ export const combineHistoricalData = async (
   let combinedData: CandlestickData[] = [];
   
   try {
+    console.log(`Fetching historical data for ${symbol} (${isStock ? 'stock' : 'crypto'})`);
+    
     // Get data from primary and secondary sources
     let primaryData: CandlestickData[] = [];
     let secondaryData: CandlestickData[] = [];
     
     if (isStock) {
       // For stocks, use Stooq as primary and Finnhub as secondary
+      console.log(`Fetching Stooq data for ${symbol}`);
       primaryData = await fetchStooqHistoricalData(symbol);
+      console.log(`Got ${primaryData.length} candles from Stooq`);
+      
+      console.log(`Fetching Finnhub data for ${symbol}`);
       secondaryData = await fetchFinnhubData(symbol);
+      console.log(`Got ${secondaryData.length} candles from Finnhub`);
     } else {
       // For crypto, use Finnhub as primary 
+      console.log(`Fetching Finnhub crypto data for ${symbol}`);
       primaryData = await fetchCryptoHistoricalData(symbol);
+      console.log(`Got ${primaryData.length} candles from Finnhub crypto endpoint`);
       // Secondary sources would be implemented in a full solution
     }
     
     // If both sources have data, merge them with preference to primary source
     if (primaryData.length > 0 && secondaryData.length > 0) {
+      console.log(`Combining data from multiple sources for ${symbol}`);
       // Create a map for fast lookup
       const primaryDataMap = new Map<string, CandlestickData>();
       primaryData.forEach(candle => {
@@ -802,20 +812,33 @@ export const combineHistoricalData = async (
       combinedData = [...primaryData];
       
       // Add secondary data only for dates not in primary
+      let addedFromSecondary = 0;
       secondaryData.forEach(candle => {
         if (!primaryDataMap.has(candle.date)) {
           combinedData.push(candle);
+          addedFromSecondary++;
         }
       });
       
+      console.log(`Added ${addedFromSecondary} additional candles from secondary source`);
+      
       // Sort by date
       combinedData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      console.log(`Total combined data points: ${combinedData.length}`);
     } else if (primaryData.length > 0) {
       // Just use primary if that's all we have
+      console.log(`Using only primary source data for ${symbol} (${primaryData.length} candles)`);
       combinedData = primaryData;
     } else if (secondaryData.length > 0) {
       // Fall back to secondary if primary fails
+      console.log(`Primary source failed, using secondary source for ${symbol} (${secondaryData.length} candles)`);
       combinedData = secondaryData;
+    } else {
+      console.log(`No data available from any source for ${symbol}`);
+    }
+    
+    if (combinedData.length > 0) {
+      console.log(`Sample data point for ${symbol}:`, combinedData[0]);
     }
   } catch (error) {
     console.error('Error combining historical data:', error);

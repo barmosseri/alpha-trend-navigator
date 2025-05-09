@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  AreaChart, 
-  Area, 
+  ComposedChart,
+  Bar,
+  Line,
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
   ReferenceLine,
-  ReferenceArea
+  ReferenceArea,
+  Rectangle,
+  Legend
 } from 'recharts';
 import { CandlestickData, SMAData, PatternResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -21,6 +24,79 @@ interface CandlestickChartProps {
   selectedPattern?: PatternResult | null;
 }
 
+// Custom candlestick renderer component
+const CandlestickBar = (props: any) => {
+  const { x, y, width, height, open, close, low, high } = props;
+  
+  const isIncreasing = close > open;
+  const color = isIncreasing ? "#33B894" : "#EA384C"; // Green for increasing, Red for decreasing
+  
+  const bodyHeight = Math.abs(y - (isIncreasing ? open : close));
+  const bodyY = isIncreasing ? y : y - bodyHeight;
+  
+  const wickY1 = Math.min(y - open, y - close);
+  const wickY2 = Math.max(y - open, y - close);
+  const wickHeight1 = wickY1 - (y - high);
+  const wickHeight2 = (y - low) - wickY2;
+  
+  // Calculate body width based on chart (can be dynamically adjusted)
+  const bodyWidth = width * 0.8;
+  const bodyX = x + (width - bodyWidth) / 2;
+
+  return (
+    <g>
+      {/* Upper wick */}
+      <line 
+        x1={x + width / 2} 
+        y1={y - high} 
+        x2={x + width / 2} 
+        y2={wickY1} 
+        stroke={color} 
+        strokeWidth={1} 
+      />
+      
+      {/* Lower wick */}
+      <line 
+        x1={x + width / 2} 
+        y1={wickY2} 
+        x2={x + width / 2} 
+        y2={y - low} 
+        stroke={color} 
+        strokeWidth={1} 
+      />
+      
+      {/* Candle body */}
+      <rect
+        x={bodyX}
+        y={bodyY}
+        width={bodyWidth}
+        height={bodyHeight || 1} // Ensure height is at least 1px for flat candles
+        fill={isIncreasing ? color : color}
+        stroke={color}
+        strokeWidth={1}
+      />
+    </g>
+  );
+};
+
+// Volume bar renderer component
+const VolumeBar = (props: any) => {
+  const { x, y, width, height, open, close } = props;
+  
+  const isIncreasing = close >= open;
+  const color = isIncreasing ? "rgba(51, 184, 148, 0.7)" : "rgba(234, 56, 76, 0.7)"; // Green for up, Red for down
+  
+  return (
+    <Rectangle
+      x={x}
+      y={y}
+      width={width * 0.8}
+      height={height}
+      fill={color}
+    />
+  );
+};
+
 const CandlestickChart: React.FC<CandlestickChartProps> = ({
   candlestickData,
   smaData = [],
@@ -29,11 +105,26 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   selectedPattern = null
 }) => {
   const [chartData, setChartData] = useState<any[]>([]);
+  const [volumeMax, setVolumeMax] = useState<number>(0);
+  
+  // Log the data we're receiving to check if it's real or mock
+  useEffect(() => {
+    console.log('CandlestickChart received data:', {
+      candles: candlestickData.length,
+      firstCandle: candlestickData[0],
+      lastCandle: candlestickData[candlestickData.length - 1],
+      sma: smaData.length
+    });
+  }, [candlestickData, smaData]);
   
   useEffect(() => {
     // Process the data for better visualization
     if (candlestickData.length) {
-      // Instead of just mapping, let's enhance the data with additional calculations
+      // Get max volume for scaling
+      const maxVol = Math.max(...candlestickData.map(d => d.volume));
+      setVolumeMax(maxVol);
+      
+      // Enhanced data processing
       const enhanced = candlestickData.map((candle, index) => {
         const smaPoint = smaData.find(sma => sma.date === candle.date);
         
@@ -56,11 +147,17 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           
         return {
           date: candle.date,
+          // OHLC data
           open: candle.open,
           high: candle.high,
           low: candle.low,
           close: candle.close,
+          // For candlestick visualization
+          highLowRange: candle.high - candle.low,
+          // Volume data
           volume: candle.volume,
+          // Scaled volume for combined chart (15% of chart height)
+          volumeScaled: (candle.volume / maxVol) * (Math.max(...candlestickData.map(d => d.high)) - Math.min(...candlestickData.map(d => d.low))) * 0.15,
           // Change visualization data
           dayChange,
           volatility,
@@ -137,7 +234,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const minPrice = Math.floor(Math.min(...prices) * 0.99); // Add small padding
   const maxPrice = Math.ceil(Math.max(...prices) * 1.01);
   
-  // Handle pattern visualization
+  // Pattern visualization
   const patternStartIndex = selectedPattern 
     ? candlestickData.findIndex(d => d.date === selectedPattern.startDate)
     : -1;
@@ -194,22 +291,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     <div className="w-full">
       <div className="h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
+          <ComposedChart
             data={chartData}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
           >
-            <defs>
-              {/* Define gradients for the areas */}
-              <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366F1" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="#6366F1" stopOpacity={0}/>
-              </linearGradient>
-              <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#818CF8" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#818CF8" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
             
             <XAxis 
@@ -227,6 +312,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             />
             
             <Tooltip content={renderTooltip} />
+            <Legend />
             
             {/* Pattern highlighting */}
             {selectedPattern && patternStartDate && patternEndDate && (
@@ -244,62 +330,67 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             {/* Support/Resistance line */}
             {renderSupportResistanceLines()}
             
-            {/* Closing prices area */}
-            <Area 
-              type="monotone" 
-              dataKey="close" 
-              stroke="#6366F1" 
-              strokeWidth={1.5}
-              fillOpacity={1} 
-              fill="url(#colorClose)" 
-              animationDuration={1000}
-            />
-            
             {/* Moving Averages */}
             {showSMA && (
               <>
-                <Area 
+                <Line 
                   type="monotone" 
                   dataKey="sma10" 
                   stroke="#33b894" 
                   strokeWidth={1.5} 
                   dot={false}
+                  name="SMA10"
                   activeDot={false}
-                  fill="none"
                   animationDuration={1000}
                 />
-                <Area 
+                <Line 
                   type="monotone" 
                   dataKey="sma30" 
                   stroke="#f59e0b" 
                   strokeWidth={1.5} 
                   dot={false}
+                  name="SMA30"
                   activeDot={false}
-                  fill="none"
                   animationDuration={1000}
                 />
-                <Area 
+                <Line 
                   type="monotone" 
                   dataKey="sma50" 
                   stroke="#EA384C" 
                   strokeWidth={1.5} 
                   dot={false}
+                  name="SMA50"
                   activeDot={false}
-                  fill="none"
                   animationDuration={1000}
                 />
               </>
             )}
             
-          </AreaChart>
+            {/* Volume Bars (displayed at bottom) */}
+            {showVolume && (
+              <Bar 
+                dataKey="volumeScaled" 
+                shape={<VolumeBar />} 
+                barSize={6}
+                name="Volume"
+              />
+            )}
+            
+            {/* Candlesticks */}
+            <Bar
+              dataKey="highLowRange"
+              shape={<CandlestickBar />}
+              name="OHLC"
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
       
-      {/* Volume Chart */}
+      {/* Volume Chart (separate) */}
       {showVolume && (
         <div className="h-[100px] mt-1">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
+            <ComposedChart
               data={chartData}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             >
@@ -317,12 +408,13 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 orientation="right"
                 width={40}
               />
-              <Area 
-                type="monotone" 
+              
+              <Tooltip content={renderTooltip} />
+              
+              <Bar 
                 dataKey="volume" 
-                stroke="#818CF8" 
-                fillOpacity={1} 
-                fill="url(#colorVolume)" 
+                shape={<VolumeBar />} 
+                barSize={6}
               />
               
               {/* Highlight pattern area in volume chart too */}
@@ -334,7 +426,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   fill={getPatternColor()}
                 />
               )}
-            </AreaChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}

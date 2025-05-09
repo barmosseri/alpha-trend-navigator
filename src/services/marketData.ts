@@ -6,7 +6,7 @@ import { mockAssets, trendingAssets as mockTrendingAssets } from '@/lib/mockData
 export let isUsingDemoData = false;
 
 // Normally, you would store this in an environment variable
-const API_KEY = 'demo'; // Replace with your Alpha Vantage API key
+const API_KEY = 'PM0MHLNXNSCGBM5K'; // Alpha Vantage API key
 
 // Alpha Vantage API base URL
 const BASE_URL = 'https://www.alphavantage.co/query';
@@ -19,9 +19,9 @@ const NEWS_API_URL = 'https://newsapi.org/v2';
 const CRYPTO_COMPARE_URL = 'https://min-api.cryptocompare.com/data';
 
 // Add your API keys here (in a real app, these would be environment variables)
-const FMP_API_KEY = 'demo';
-const NEWS_API_KEY = 'demo';
-const CRYPTO_COMPARE_API_KEY = 'demo';
+const FMP_API_KEY = '25ce4547da1aacf286c7c1f5178f3d4d';
+const NEWS_API_KEY = '967f84cca9e944b6869989e0b32ee951';
+const CRYPTO_COMPARE_API_KEY = '26d7b71f0f39e0a3d961c89e984eb494ec9bd964b947ad1159f01c2b53261bd8';
 
 /**
  * Fetches stock or crypto data from Alpha Vantage API
