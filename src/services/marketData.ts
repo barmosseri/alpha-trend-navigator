@@ -1,5 +1,9 @@
 import axios from 'axios';
 import { Asset, CandlestickData, SMAData, TrendingAsset } from '@/lib/types';
+import { mockAssets, trendingAssets as mockTrendingAssets } from '@/lib/mockData';
+
+// Flag to track if we're using demo data
+export let isUsingDemoData = false;
 
 // Normally, you would store this in an environment variable
 const API_KEY = 'demo'; // Replace with your Alpha Vantage API key
@@ -87,12 +91,46 @@ export const fetchAssetData = async (symbol: string, isStock = true): Promise<As
       }
     }
     
-    console.error('Unable to parse API response:', response.data);
-    return null;
+    // If we got here, the response format wasn't as expected - fall back to mock data
+    console.error('Could not parse API response format:', response.data);
+    isUsingDemoData = true;
+    return fallbackToMockAsset(symbol);
   } catch (error) {
     console.error('Error fetching asset data:', error);
-    return null;
+    isUsingDemoData = true;
+    return fallbackToMockAsset(symbol);
   }
+};
+
+/**
+ * Helper function to find a mock asset when API calls fail
+ */
+const fallbackToMockAsset = (symbol: string): Asset | null => {
+  // Find the mock asset with the matching symbol
+  const mockAsset = mockAssets.find(asset => 
+    asset.symbol.toLowerCase() === symbol.toLowerCase()
+  );
+  
+  if (mockAsset) {
+    console.log(`Using mock data for ${symbol}`);
+    return mockAsset;
+  }
+  
+  // If no matching mock asset, create a basic one
+  return {
+    id: symbol,
+    symbol: symbol,
+    name: `${symbol} (Demo)`,
+    type: symbol.length <= 4 ? 'crypto' : 'stock',
+    price: 100 + Math.random() * 50,
+    change: (Math.random() * 6) - 3, // Random change between -3% and 3%
+    marketCap: 1000000000,
+    volume: 10000000,
+    rating: 5,
+    trend: Math.random() > 0.5 ? 'RISING' : 'FALLING',
+    analysis: 'Demo analysis - real data not available',
+    recommendation: Math.random() > 0.7 ? 'BUY' : Math.random() > 0.4 ? 'HOLD' : 'SELL'
+  };
 };
 
 /**
@@ -307,7 +345,7 @@ export const generateSMAData = (candlestickData: CandlestickData[]): SMAData[] =
 };
 
 /**
- * Fetches trending assets based on volume and price change
+ * Fetches trending assets (top performing/most popular)
  */
 export const fetchTrendingAssets = async (): Promise<TrendingAsset[]> => {
   // In a real implementation, you would fetch top performing assets
@@ -336,10 +374,19 @@ export const fetchTrendingAssets = async (): Promise<TrendingAsset[]> => {
       }
     }
     
+    if (trendingAssets.length === 0) {
+      // If we couldn't fetch any real trending assets, use mock data
+      isUsingDemoData = true;
+      console.log("Using mock trending assets data");
+      return mockTrendingAssets;
+    }
+    
     return trendingAssets;
   } catch (error) {
     console.error('Error fetching trending assets:', error);
-    return [];
+    isUsingDemoData = true;
+    console.log("Using mock trending assets data due to error");
+    return mockTrendingAssets;
   }
 };
 

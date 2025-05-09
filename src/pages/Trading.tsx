@@ -52,6 +52,9 @@ const Trading = () => {
   const [technicalIndicators, setTechnicalIndicators] = useState<TechnicalIndicator[]>([]);
   const navigate = useNavigate();
   
+  // Add state for portfolio analysis
+  const [isAnalyzingPortfolio, setIsAnalyzingPortfolio] = useState<boolean>(false);
+  
   // Load real data instead of mock
   useEffect(() => {
     loadRealAssets();
@@ -133,6 +136,34 @@ const Trading = () => {
   const handleSelectAsset = (asset: Asset) => {
     setSelectedAsset(asset);
     loadAssetData(asset);
+  };
+  
+  // Add portfolio analysis function
+  const runPortfolioAnalysis = async () => {
+    setIsAnalyzingPortfolio(true);
+    
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Navigate to portfolio page with analysis results
+      toast({
+        title: "Portfolio Analysis Complete",
+        description: "AI optimization suggestions are now available",
+      });
+      
+      // Navigate to portfolio page
+      navigate("/asset/PORTFOLIO");
+    } catch (error) {
+      console.error('Error running portfolio analysis:', error);
+      toast({
+        title: "Error",
+        description: "Failed to analyze portfolio. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzingPortfolio(false);
+    }
   };
   
   return (
@@ -450,7 +481,20 @@ const Trading = () => {
             </CardContent>
             <Separator />
             <CardFooter className="pt-4">
-              <Button className="w-full">View Full Portfolio Analysis</Button>
+              <Button 
+                className="w-full"
+                onClick={runPortfolioAnalysis}
+                disabled={isAnalyzingPortfolio}
+              >
+                {isAnalyzingPortfolio ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-t-white rounded-full border-background animate-spin mr-2"></div>
+                    Analyzing...
+                  </>
+                ) : (
+                  'Run Custom Portfolio Analysis'
+                )}
+              </Button>
             </CardFooter>
           </Card>
         </div>

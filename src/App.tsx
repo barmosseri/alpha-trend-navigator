@@ -1,9 +1,8 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 import Watchlist from "./pages/Watchlist";
 import Trading from "./pages/Trading";
@@ -20,8 +19,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Watchlist />} />
+            <Route index element={<Navigate to="/trading" replace />} />
             <Route path="trading" element={<Trading />} />
+            <Route path="watchlist" element={<Watchlist />} />
             <Route path="asset/:id" element={<AssetDetail />} />
           </Route>
           <Route path="*" element={<NotFound />} />

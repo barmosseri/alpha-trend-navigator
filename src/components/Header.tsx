@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,8 +32,8 @@ const Header = () => {
         
         <Tabs value={currentTab} onValueChange={(value) => navigate(`/${value === 'watchlist' ? '' : value}`)}>
           <TabsList>
-            <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
             <TabsTrigger value="trading">Trading</TabsTrigger>
+            <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
           </TabsList>
         </Tabs>
         

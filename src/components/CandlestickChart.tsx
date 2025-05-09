@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AreaChart, 
   Area, 
@@ -28,25 +28,54 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   showVolume = true,
   selectedPattern = null
 }) => {
-  // Create data for the chart (combine candlestick data and SMA)
-  const chartData = candlestickData.map((candle) => {
-    const smaPoint = smaData.find(sma => sma.date === candle.date);
-    
-    return {
-      date: candle.date,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-      volume: candle.volume,
-      // Optional SMA values
-      sma10: smaPoint?.sma10,
-      sma30: smaPoint?.sma30,
-      sma50: smaPoint?.sma50
-    };
-  });
+  const [chartData, setChartData] = useState<any[]>([]);
   
-  // Custom tooltip content
+  useEffect(() => {
+    // Process the data for better visualization
+    if (candlestickData.length) {
+      // Instead of just mapping, let's enhance the data with additional calculations
+      const enhanced = candlestickData.map((candle, index) => {
+        const smaPoint = smaData.find(sma => sma.date === candle.date);
+        
+        // Calculate percentage change from previous day
+        const previousDay = index > 0 ? candlestickData[index - 1] : null;
+        const dayChange = previousDay 
+          ? ((candle.close - previousDay.close) / previousDay.close) * 100 
+          : 0;
+          
+        // Calculate volatility as a simple 5-day rolling window
+        const volatilityWindow = candlestickData.slice(
+          Math.max(0, index - 5), 
+          index + 1
+        );
+        const prices = volatilityWindow.map(d => d.close);
+        const avgPrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+        const volatility = prices.length > 1
+          ? Math.sqrt(prices.reduce((sum, price) => sum + Math.pow(price - avgPrice, 2), 0) / prices.length)
+          : 0;
+          
+        return {
+          date: candle.date,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+          // Change visualization data
+          dayChange,
+          volatility,
+          // Optional SMA values
+          sma10: smaPoint?.sma10,
+          sma30: smaPoint?.sma30,
+          sma50: smaPoint?.sma50
+        };
+      });
+      
+      setChartData(enhanced);
+    }
+  }, [candlestickData, smaData]);
+  
+  // Custom tooltip content with enhanced information
   const renderTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -68,6 +97,15 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             )}>
               ${data.close.toFixed(2)}
             </div>
+            <div>Change:</div>
+            <div className={cn(
+              "text-right",
+              data.dayChange >= 0 ? "text-app-green" : "text-app-red"
+            )}>
+              {data.dayChange >= 0 ? "+" : ""}{data.dayChange.toFixed(2)}%
+            </div>
+            <div>Volume:</div>
+            <div className="text-right">{(data.volume / 1000000).toFixed(2)}M</div>
             {data.sma10 && (
               <>
                 <div>SMA10:</div>
@@ -121,11 +159,11 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (!selectedPattern) return 'rgba(99, 102, 241, 0.2)'; // Default blue
     
     if (selectedPattern.signal === 'bullish') {
-      return 'rgba(51, 184, 148, 0.2)'; // Green
+      return 'rgba(51, 184, 148, 0.3)'; // Green
     } else if (selectedPattern.signal === 'bearish') {
-      return 'rgba(234, 56, 76, 0.2)'; // Red
+      return 'rgba(234, 56, 76, 0.3)'; // Red
     } else {
-      return 'rgba(245, 158, 11, 0.2)'; // Yellow/orange
+      return 'rgba(245, 158, 11, 0.3)'; // Yellow/orange
     }
   };
   
@@ -190,36 +228,31 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             
             <Tooltip content={renderTooltip} />
             
-            {/* Draw candlesticks */}
-            {chartData.map((data, index) => (
-              <React.Fragment key={index}>
-                {/* Vertical line for price range */}
-                <line
-                  x1={index}
-                  y1={data.low}
-                  x2={index}
-                  y2={data.high}
-                  stroke="rgba(255,255,255,0.5)"
-                  strokeWidth={1}
-                />
-                {/* Colored rectangle for open/close */}
-                <rect
-                  x={index - 0.3}
-                  y={Math.min(data.open, data.close)}
-                  width={0.6}
-                  height={Math.abs(data.open - data.close) || 1}
-                  fill={data.close >= data.open ? '#33b894' : '#EA384C'}
-                />
-              </React.Fragment>
-            ))}
+            {/* Pattern highlighting */}
+            {selectedPattern && patternStartDate && patternEndDate && (
+              <ReferenceArea 
+                x1={patternStartDate} 
+                x2={patternEndDate} 
+                fill={getPatternColor()} 
+                fillOpacity={0.3} 
+                stroke={selectedPattern.signal === 'bullish' ? "#33b894" : 
+                        selectedPattern.signal === 'bearish' ? "#EA384C" : "#f59e0b"}
+                strokeDasharray="3 3"
+              />
+            )}
+            
+            {/* Support/Resistance line */}
+            {renderSupportResistanceLines()}
             
             {/* Closing prices area */}
             <Area 
               type="monotone" 
               dataKey="close" 
               stroke="#6366F1" 
+              strokeWidth={1.5}
               fillOpacity={1} 
               fill="url(#colorClose)" 
+              animationDuration={1000}
             />
             
             {/* Moving Averages */}
@@ -233,6 +266,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   activeDot={false}
                   fill="none"
+                  animationDuration={1000}
                 />
                 <Area 
                   type="monotone" 
@@ -242,6 +276,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   activeDot={false}
                   fill="none"
+                  animationDuration={1000}
                 />
                 <Area 
                   type="monotone" 
@@ -251,27 +286,11 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   activeDot={false}
                   fill="none"
+                  animationDuration={1000}
                 />
               </>
             )}
             
-            {/* Highlight pattern area if selected */}
-            {selectedPattern && patternStartDate && patternEndDate && (
-              <ReferenceArea 
-                x1={patternStartDate} 
-                x2={patternEndDate} 
-                fill={getPatternColor()} 
-                fillOpacity={0.6}
-                strokeOpacity={0.8}
-                stroke={selectedPattern.signal === 'bullish' ? "#33b894" : 
-                        selectedPattern.signal === 'bearish' ? "#EA384C" : "#f59e0b"}
-                strokeWidth={1}
-                strokeDasharray="3 3"
-              />
-            )}
-            
-            {/* Support/resistance lines */}
-            {renderSupportResistanceLines()}
           </AreaChart>
         </ResponsiveContainer>
       </div>
