@@ -1,28 +1,21 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useAssets } from '@/contexts/AssetsContext';
-import { 
-  fetchAssetData,
-  fetchCandlestickData,
-  generateSMAData
-} from '@/services/marketData';
-import { Asset, CandlestickData, SMAData } from '@/lib/types';
-import CandlestickChart from '@/components/CandlestickChart';
-import { ArrowUp, ArrowDown, TrendingUp, TrendingDown, Plus, Minus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-// Removed mock data imports to ensure we only use real data
-import { toast } from '@/components/ui/use-toast';
-
-// Import our new components
-import ExplainableAI from '@/components/ExplainableAI';
-import OnChainAnalytics from '@/components/OnChainAnalytics';
-import { generatePricePrediction, generateTechnicalIndicators, updateModelWeights } from '@/services/mlService';
-import { fetchAssetNews, fetchOnChainData } from '@/services/marketData';
+import { Asset, CandlestickData, SMAData, PatternResult } from '@/lib/types';
+import { fetchAssetData, fetchCandlestickData, generateSMAData, fetchAssetNews } from '@/services/marketData';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, Newspaper } from 'lucide-react';
+import CandlestickChart from '@/components/CandlestickChart';
+import { useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import NewsSection from '@/components/NewsSection';
+import { useAssets } from '@/contexts/AssetsContext';
+import AssetHeader from '@/components/AssetHeader';
 import PatternDetection from '@/components/PatternDetection';
-import { combineHistoricalData } from '@/services/patternDetectionService';
+import PatternDetectionFeatures from '@/components/PatternDetectionFeatures';
 
 const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -446,124 +439,122 @@ const AssetDetail = () => {
   }
   
   return (
-    <div className="container py-6">
-      <div className="flex flex-col md:flex-row justify-between items-start mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{asset.symbol}</h1>
-            <span className="text-lg text-muted-foreground">({asset.name})</span>
-            <span className="text-sm bg-secondary rounded px-1.5 py-0.5">{asset.type.toUpperCase()}</span>
-          </div>
-          
-          <div className="flex items-center gap-2 mt-1">
-            <div className="font-semibold text-xl">${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <div className={cn(
-              "flex items-center text-sm",
-              asset.change >= 0 ? "text-app-green" : "text-app-red"
-            )}>
-              {asset.change >= 0 ? (
-                <ArrowUp className="h-4 w-4 mr-0.5" />
-              ) : (
-                <ArrowDown className="h-4 w-4 mr-0.5" />
-              )}
-              {Math.abs(asset.change).toFixed(2)}%
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Button
-            variant="outline"
-            onClick={() => isInWatchlist(asset.id) ? removeFromWatchlist(asset.id) : addToWatchlist(asset)}
-          >
-            {isInWatchlist(asset.id) ? 'Remove from Watchlist' : 'Add to Watchlist'}
-          </Button>
-          <Button 
-            variant="default" 
-            onClick={generateDetailedReport}
-            disabled={isGeneratingReport}
-          >
-            {isGeneratingReport ? (
-              <>
-                <div className="w-4 h-4 border-2 border-t-white rounded-full border-background animate-spin mr-2"></div>
-                Generating...
-              </>
-            ) : (
-              'Request Detailed AI Report'
-            )}
-          </Button>
-          <Button 
-            variant="secondary" 
-            onClick={runCustomPortfolioAnalysis}
-          >
-            Run Portfolio Analysis
-          </Button>
-        </div>
-      </div>
+    <div className="container pt-6 pb-16">
+      <AssetHeader asset={asset} />
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-0">
-            <div className="flex justify-between items-center">
-              <CardTitle>
-                {asset.symbol} {asset.type === 'stock' ? 'AI Powered Stock Chart' : 'AI Powered Crypto Chart'}
-              </CardTitle>
-              <div className="flex gap-1">
-                <Button 
-                  variant={timeframe === '30d' ? 'secondary' : 'ghost'} 
-                  size="sm"
-                  onClick={() => setTimeframe('30d')}
-                >
-                  30D
-                </Button>
-                <Button 
-                  variant={timeframe === '90d' ? 'secondary' : 'ghost'} 
-                  size="sm"
-                  onClick={() => setTimeframe('90d')}
-                >
-                  90D
-                </Button>
-                <Button 
-                  variant={timeframe === '1y' ? 'secondary' : 'ghost'} 
-                  size="sm"
-                  onClick={() => setTimeframe('1y')}
-                >
-                  1Y
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {candlestickData.length > 0 ? (
-              <>
-                <div className="text-sm text-muted-foreground mb-2">
-                  {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  {' '}
-                  <span className="bg-[#9b87f5] px-1 rounded-sm text-white">
-                    {asset.symbol}:
-                  </span> 
-                  {' '}
-                  O: ${asset.price.toFixed(2)}; H: ${(asset.price * 1.01).toFixed(2)}; 
-                  L: ${(asset.price * 0.99).toFixed(2)}; C: ${asset.price.toFixed(2)}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        <div className="lg:col-span-2">
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Price Chart</CardTitle>
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setTimeframe('30d')}
+                    className={cn(timeframe === '30d' && "bg-accent")}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1" /> 
+                    30D
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setTimeframe('90d')}
+                    className={cn(timeframe === '90d' && "bg-accent")}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1" /> 
+                    90D
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setTimeframe('1y')}
+                    className={cn(timeframe === '1y' && "bg-accent")}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1" /> 
+                    1Y
+                  </Button>
                 </div>
-                <CandlestickChart 
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[500px] relative">
+                {isLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-10 h-10 border-4 border-t-app-blue rounded-full border-muted animate-spin"></div>
+                  </div>
+                ) : candlestickData.length > 0 ? (
+                  <CandlestickChart 
+                    candlestickData={candlestickData} 
+                    smaData={smaData}
+                    showSMA={showSMA}
+                    showVolume={showVolume}
+                    selectedPattern={selectedPattern}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-muted-foreground">No chart data available</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 flex justify-between items-center">
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowSMA(!showSMA)}
+                    className={cn(showSMA && "bg-accent")}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1" /> 
+                    SMA
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowVolume(!showVolume)}
+                    className={cn(showVolume && "bg-accent")}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1" /> 
+                    Volume
+                  </Button>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {candlestickData.length > 0 && `${candlestickData.length} data points`}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {!isLoading && asset && candlestickData.length > 10 && (
+              <>
+                <PatternDetection 
+                  asset={asset} 
                   candlestickData={candlestickData} 
-                  smaData={smaData}
-                  showSMA={true}
-                  showVolume={true}
-                  selectedPattern={selectedPattern}
+                  onPatternSelect={handlePatternSelect} 
+                />
+                <PatternDetectionFeatures 
+                  asset={asset}
+                  candlestickData={candlestickData}
                 />
               </>
-            ) : (
-              <div className="h-[400px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin mx-auto mb-4"></div>
-                  <div>Loading chart data...</div>
-                </div>
-              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Newspaper className="h-5 w-5 mr-2" />
+                Latest News
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <NewsSection symbol={symbol || ''} />
+            </CardContent>
+          </Card>
+        </div>
         
         <div className="space-y-6">
           <Card>
@@ -633,13 +624,6 @@ const AssetDetail = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Add Pattern Detection Component */}
-          <PatternDetection 
-            asset={asset}
-            candlestickData={candlestickData}
-            onPatternSelect={handlePatternSelect}
-          />
         </div>
       </div>
       
