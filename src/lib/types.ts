@@ -127,8 +127,9 @@ export interface DataSource {
   enabled: boolean;
   type: 'api' | 'rss' | 'webscraper' | 'stock' | 'crypto' | 'both'; // Updated to include all used types
   costPerRequest?: number;
-  apiKey?: string; // Added missing property
-  description?: string; // Added missing property
+  apiKey?: string;
+  description?: string;
+  url?: string; // Added missing property
 }
 
 export interface PortfolioAsset extends Asset {
@@ -140,6 +141,7 @@ export interface PortfolioAsset extends Asset {
   risk?: number;
   expectedReturn?: number;
   correlation?: Record<string, number>;
+  price?: number; // Added price property
 }
 
 export interface OnChainData {
@@ -147,9 +149,9 @@ export interface OnChainData {
   networkHashRate?: number;
   transactionVolume: number;
   averageFee: number;
-  transactionCount?: number; // Added missing property
-  difficulty?: number; // Added missing property
-  fees?: number; // Added missing property
+  transactionCount?: number;
+  difficulty?: number;
+  fees?: number;
   mempool?: {
     pending: number;
     size: string;

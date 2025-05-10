@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ComposedChart,
@@ -27,7 +28,16 @@ interface CandlestickChartProps {
   patterns?: PatternResult[];
   selectedPattern?: PatternResult | null;
   onPatternSelect?: (pattern: PatternResult | null) => void;
+  showSMA?: boolean; // Added prop
+  showVolume?: boolean; // Added prop
 }
+
+// Helper function declaration moved up before its use
+const get3MonthsAgo = (): Date => {
+  const now = new Date();
+  now.setMonth(now.getMonth() - 3);
+  return now;
+};
 
 const CandlestickChart: React.FC<CandlestickChartProps> = ({
   candlestickData,
@@ -35,6 +45,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   patterns,
   selectedPattern,
   onPatternSelect,
+  showSMA = true, // Default value
+  showVolume = true, // Default value
 }) => {
   const [tooltipContent, setTooltipContent] = useState<string | null>(null);
   const chartRef = useRef<any>(null);
@@ -97,12 +109,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     return null;
   };
 
-  const get3MonthsAgo = (): Date => {
-    const now = new Date();
-    now.setMonth(now.getMonth() - 3);
-    return now;
-  };
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -155,10 +161,14 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             <YAxis domain={['dataMin - 10', 'dataMax + 10']} />
             <Tooltip content={renderTooltipContent} />
             <Legend />
-            <Bar dataKey="volume" barSize={5} fill="#413ea0" />
-            <Line type="monotone" dataKey="sma10" stroke="#8884d8" strokeWidth={1.5} dot={false} />
-            <Line type="monotone" dataKey="sma30" stroke="#82ca9d" strokeWidth={1.5} dot={false} />
-            <Line type="monotone" dataKey="sma50" stroke="#e45649" strokeWidth={1.5} dot={false} />
+            {showVolume && <Bar dataKey="volume" barSize={5} fill="#413ea0" />}
+            {showSMA && (
+              <>
+                <Line type="monotone" dataKey="sma10" stroke="#8884d8" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="sma30" stroke="#82ca9d" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="sma50" stroke="#e45649" strokeWidth={1.5} dot={false} />
+              </>
+            )}
             {filteredData.map((entry, index) => (
               <ReferenceArea
                 key={`area-${index}`}
@@ -235,14 +245,16 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         </Popover>
       </div>
       {renderChart()}
-      <style>{`
+      <style>
+        {`
         .recharts-tooltip-item-name {
           font-weight: bold;
         }
         .recharts-tooltip-item-value {
           font-style: italic;
         }
-      `}</style>
+      `}
+      </style>
     </div>
   );
 };

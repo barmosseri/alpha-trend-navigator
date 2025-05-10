@@ -132,8 +132,7 @@ const AssetDetail = () => {
         if (chartData.length === 0) {
           toast({
             title: "Limited Data Available",
-            description: "Using sample data for chart visualization.",
-            variant: "default" // Changed from warning to default
+            description: "Using sample data for chart visualization."
           });
           
           // Generate sample data if no real data available
@@ -193,7 +192,7 @@ const AssetDetail = () => {
     };
     
     loadChartData();
-  }, [asset, timeframe, toast]);
+  }, [asset, timeframe]);
   
   // Add helper function to filter candlestick data by timeframe
   const filterCandlesticksByTimeframe = (
@@ -345,16 +344,14 @@ const AssetDetail = () => {
           console.warn('No news data available for', asset.symbol);
           toast({
             title: "News Unavailable",
-            description: "Could not fetch news data for this asset. Using technical analysis only.",
-            variant: "warning"
+            description: "Could not fetch news data for this asset. Using technical analysis only."
           });
         }
       } catch (error) {
         console.error('Error loading news:', error);
         toast({
           title: "News Data Error",
-          description: "Failed to load news data. Using technical analysis only.",
-          variant: "default" // Changed from warning to default
+          description: "Failed to load news data. Using technical analysis only."
         });
       }
     };
@@ -371,16 +368,14 @@ const AssetDetail = () => {
           console.warn('No on-chain data available for', asset.symbol);
           toast({
             title: "On-Chain Data Unavailable",
-            description: "Could not fetch on-chain data for this cryptocurrency. Using price data only.",
-            variant: "warning"
+            description: "Could not fetch on-chain data for this cryptocurrency. Using price data only."
           });
         }
       } catch (error) {
         console.error('Error loading on-chain data:', error);
         toast({
           title: "On-Chain Data Error",
-          description: "Failed to load on-chain data. Using price data only.",
-          variant: "default" // Changed from warning to default
+          description: "Failed to load on-chain data. Using price data only."
         });
       }
     };
@@ -389,7 +384,7 @@ const AssetDetail = () => {
     if (asset.type === 'crypto') {
       loadOnChainData();
     }
-  }, [asset, candlestickData, toast]);
+  }, [asset, candlestickData]);
   
   // Implement custom portfolio analysis functionality
   const runCustomPortfolioAnalysis = async () => {
@@ -635,6 +630,7 @@ const AssetDetail = () => {
                     showSMA={showSMA}
                     showVolume={showVolume}
                     selectedPattern={selectedPattern}
+                    onPatternSelect={handlePatternSelect}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">

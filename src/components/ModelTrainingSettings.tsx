@@ -75,6 +75,8 @@ const ModelTrainingSettings: React.FC<ModelTrainingSettingsProps> = ({ onTrainCo
     'HEAD_AND_SHOULDERS': 0.8,
     'DOUBLE_TOP': 0.8,
     'DOUBLE_BOTTOM': 0.8,
+    'TRIPLE_TOP': 0.7,
+    'TRIPLE_BOTTOM': 0.7,
     'ASCENDING_TRIANGLE': 0.7,
     'DESCENDING_TRIANGLE': 0.7,
     'SYMMETRICAL_TRIANGLE': 0.6,
@@ -89,51 +91,67 @@ const ModelTrainingSettings: React.FC<ModelTrainingSettingsProps> = ({ onTrainCo
   // Mock available data sources
   const availableDataSources: DataSource[] = [
     {
+      id: 'stooq',
       name: 'Stooq',
-      url: 'https://stooq.com/db/h/',
+      priority: 1,
+      enabled: true,
       type: 'stock',
       description: 'Historical stock market data in CSV format'
     },
     {
+      id: 'finnhub',
       name: 'Finnhub',
-      url: 'https://finnhub.io/',
-      apiKey: 'YOUR_FINNHUB_API_KEY',
+      priority: 2,
+      enabled: true,
       type: 'both',
+      apiKey: 'YOUR_FINNHUB_API_KEY',
       description: 'Real-time market data API for stocks and crypto'
     },
     {
+      id: 'investing',
       name: 'Investing.com',
-      url: 'https://www.investing.com/crypto/bitcoin/historical-data',
+      priority: 3,
+      enabled: true,
       type: 'crypto',
       description: 'Historical cryptocurrency prices and data'
     },
     {
+      id: 'bitbo',
       name: 'Bitbo.io',
-      url: 'https://charts.bitbo.io/price/',
+      priority: 4,
+      enabled: false,
       type: 'crypto',
       description: 'Bitcoin market data and metrics'
     },
     {
+      id: 'marketwatch',
       name: 'MarketWatch',
-      url: 'https://www.marketwatch.com/site/rss',
+      priority: 5,
+      enabled: false,
       type: 'both',
       description: 'Financial news and market data via RSS feeds'
     },
     {
+      id: 'nasdaq',
       name: 'Nasdaq',
-      url: 'https://www.nasdaq.com/nasdaq-RSS-Feeds',
+      priority: 6,
+      enabled: false,
       type: 'both',
       description: 'Stock and crypto market news via RSS feeds'
     },
     {
+      id: 'cointelegraph',
       name: 'CoinTelegraph',
-      url: 'https://cointelegraph.com/rss-feeds',
+      priority: 7,
+      enabled: false,
       type: 'crypto',
       description: 'Cryptocurrency news and analysis via RSS'
     },
     {
+      id: 'coindesk',
       name: 'CoinDesk',
-      url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
+      priority: 8,
+      enabled: false,
       type: 'crypto',
       description: 'Cryptocurrency news and price data'
     }
@@ -680,4 +698,4 @@ const ModelTrainingSettings: React.FC<ModelTrainingSettingsProps> = ({ onTrainCo
   );
 };
 
-export default ModelTrainingSettings; 
+export default ModelTrainingSettings;
