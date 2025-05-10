@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,6 +129,25 @@ const PatternDetectionFeatures: React.FC<PatternDetectionFeaturesProps> = ({
       </Card>
     );
   }
+  
+  // Check if candlestickData is available before accessing it
+  const safelyGetFirstDate = () => {
+    if (candlestickData && candlestickData.length > 0 && candlestickData[0] && candlestickData[0].date) {
+      return new Date(candlestickData[0].date);
+    }
+    return new Date(); // Default to current date if data isn't available
+  };
+  
+  // Check if candlestickData is available before accessing it
+  const safelyGetLastDate = () => {
+    if (candlestickData && candlestickData.length > 0) {
+      const lastIndex = candlestickData.length - 1;
+      if (candlestickData[lastIndex] && candlestickData[lastIndex].date) {
+        return new Date(candlestickData[lastIndex].date);
+      }
+    }
+    return new Date(); // Default to current date if data isn't available
+  };
   
   return (
     <Card>
@@ -365,28 +385,47 @@ const PatternDetectionFeatures: React.FC<PatternDetectionFeaturesProps> = ({
                   <div className="border rounded-lg p-3">
                     <div className="text-sm font-medium mb-2">Pattern Timeline</div>
                     <div className="relative h-40 border-b border-l">
-                      {patterns.map((pattern, index) => (
-                        <div 
-                          key={index}
-                          className={cn(
-                            "absolute w-4 h-4 rounded-full -ml-2 -mt-2",
-                            pattern.signal === 'bullish' ? "bg-app-green" :
-                            pattern.signal === 'bearish' ? "bg-app-red" :
-                            "bg-yellow-500"
-                          )}
-                          style={{
-                            left: `${(new Date(pattern.endDate).getTime() - new Date(candlestickData[0].date).getTime()) / 
-                              (new Date(candlestickData[candlestickData.length-1].date).getTime() - 
-                               new Date(candlestickData[0].date).getTime()) * 100}%`,
-                            bottom: `${pattern.strength * 100}%`
-                          }}
-                          title={`${pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')} - ${Math.round(pattern.strength * 100)}% strength`}
-                        ></div>
-                      ))}
+                      {patterns.length > 0 && candlestickData && candlestickData.length > 0 && patterns.map((pattern, index) => {
+                        // Get the first date safely
+                        const firstDate = safelyGetFirstDate();
+                        // Get the last date safely
+                        const lastDate = safelyGetLastDate();
+                        
+                        // Calculate the position only if we have valid dates
+                        const dateRange = lastDate.getTime() - firstDate.getTime();
+                        if (dateRange <= 0) return null; // Skip if date range is invalid
+                        
+                        const patternDate = new Date(pattern.endDate).getTime();
+                        // Calculate left position as percentage
+                        const leftPos = ((patternDate - firstDate.getTime()) / dateRange) * 100;
+                        
+                        return (
+                          <div 
+                            key={index}
+                            className={cn(
+                              "absolute w-4 h-4 rounded-full -ml-2 -mt-2",
+                              pattern.signal === 'bullish' ? "bg-app-green" :
+                              pattern.signal === 'bearish' ? "bg-app-red" :
+                              "bg-yellow-500"
+                            )}
+                            style={{
+                              left: `${leftPos}%`,
+                              bottom: `${pattern.strength * 100}%`
+                            }}
+                            title={`${pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')} - ${Math.round(pattern.strength * 100)}% strength`}
+                          ></div>
+                        );
+                      })}
                     </div>
                     <div className="flex justify-between text-xs mt-1">
-                      <span>{new Date(candlestickData[0].date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                      <span>{new Date(candlestickData[candlestickData.length-1].date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                      <span>{candlestickData && candlestickData.length > 0 
+                        ? new Date(candlestickData[0].date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})
+                        : "N/A"}
+                      </span>
+                      <span>{candlestickData && candlestickData.length > 0 
+                        ? new Date(candlestickData[candlestickData.length-1].date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})
+                        : "N/A"}
+                      </span>
                     </div>
                     <div className="text-xs mt-1">
                       <span className="text-muted-foreground">Vertical axis:</span> Pattern strength

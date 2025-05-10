@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ComposedChart,
@@ -11,9 +12,7 @@ import {
   ReferenceLine,
   ReferenceArea,
   Rectangle,
-  Legend,
-  Animating,
-  Animated
+  Legend
 } from 'recharts';
 import { CandlestickData, SMAData, PatternResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -60,7 +59,6 @@ const CandlestickBar = (props: any) => {
         stroke={color} 
         strokeWidth={1}
         opacity={0.9}
-        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Lower wick */}
@@ -72,7 +70,6 @@ const CandlestickBar = (props: any) => {
         stroke={color} 
         strokeWidth={1}
         opacity={0.9}
-        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Candle body */}
@@ -85,7 +82,6 @@ const CandlestickBar = (props: any) => {
         stroke={color}
         strokeWidth={1}
         opacity={0.9}
-        style={{ animation: `growIn 0.4s ease ${animationDelay}ms forwards` }}
       />
     </g>
   );
@@ -103,9 +99,6 @@ const VolumeBar = (props: any) => {
   // Thinner bars look more realistic
   const barWidth = Math.min(width * 0.7, 6);
   
-  // Animation delay based on index
-  const animationDelay = index * 10;
-  
   return (
     <Rectangle
       x={x + (width - barWidth) / 2}
@@ -116,7 +109,6 @@ const VolumeBar = (props: any) => {
       stroke={strokeColor}
       strokeWidth={0.5}
       radius={[1, 1, 0, 0]}
-      style={{ animation: `growUp 0.4s ease ${animationDelay}ms forwards` }}
     />
   );
 };
@@ -140,7 +132,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         firstCandle: candlestickData[0],
         lastCandle: candlestickData[candlestickData.length - 1],
         sma: smaData.length,
-        isRealData: !window.isUsingDemoData
+        // Remove reference to window.isUsingDemoData
+        isRealData: true
       });
     }
   }, [candlestickData, smaData]);
@@ -433,8 +426,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           <ComposedChart
             data={chartData}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            animationDuration={1000}
-            animationEasing="ease-in-out"
           >
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
             
@@ -485,7 +476,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA10"
                   activeDot={false}
-                  animationDuration={1500}
                   isAnimationActive={true}
                 />
                 <Line 
@@ -496,7 +486,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA30"
                   activeDot={false}
-                  animationDuration={1500}
                   isAnimationActive={true}
                 />
                 <Line 
@@ -507,7 +496,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA50"
                   activeDot={false}
-                  animationDuration={1500}
                   isAnimationActive={true}
                 />
               </>
@@ -521,8 +509,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 barSize={6}
                 name="Volume"
                 isAnimationActive={true}
-                animationDuration={1200}
-                animationEasing="ease-out"
               />
             )}
             
@@ -532,8 +518,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
               shape={<CandlestickBar />}
               name="OHLC"
               isAnimationActive={true}
-              animationDuration={1000}
-              animationEasing="ease-out"
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -546,7 +530,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             <ComposedChart
               data={chartData}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              animationDuration={1000}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
               <XAxis 
@@ -570,7 +553,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 shape={<VolumeBar />} 
                 barSize={6}
                 isAnimationActive={true}
-                animationDuration={1200}
               />
               
               {/* Highlight pattern area in volume chart too */}
@@ -611,7 +593,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
       )}
       
       {/* Add CSS animations */}
-      <style jsx global>{`
+      <style>
+        {`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 0.9; }
@@ -624,10 +607,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           from { transform: scaleY(0); opacity: 0; }
           to { transform: scaleY(1); opacity: 0.7; }
         }
-      `}</style>
+        `}
+      </style>
     </div>
   );
 };
 
 export default CandlestickChart;
-
