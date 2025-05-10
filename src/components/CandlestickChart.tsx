@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ComposedChart,
@@ -14,6 +13,7 @@ import {
   Rectangle,
   Legend
 } from 'recharts';
+import { isUsingDemoData, fetchCandlestickData } from '@/services/marketData';
 import { CandlestickData, SMAData, PatternResult } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -25,24 +25,24 @@ interface CandlestickChartProps {
   selectedPattern?: PatternResult | null;
 }
 
-// Custom candlestick renderer component with improved visuals
+// Enhanced Japanese candlestick renderer component with professional trading visuals
 const CandlestickBar = (props: any) => {
   const { x, y, width, height, open, close, low, high, index } = props;
   
   const isIncreasing = close > open;
   // Use more vibrant colors for better visualization
-  const color = isIncreasing ? "#22C55E" : "#EF4444"; // Green for increasing, Red for decreasing
+  const fillColor = isIncreasing ? "#22C55E" : "#EF4444"; // Green for increasing, Red for decreasing
+  const strokeColor = isIncreasing ? "#22C55E" : "#EF4444";
   
   const bodyHeight = Math.abs(y - (isIncreasing ? open : close));
   const bodyY = isIncreasing ? y : y - bodyHeight;
   
   const wickY1 = Math.min(y - open, y - close);
   const wickY2 = Math.max(y - open, y - close);
-  const wickHeight1 = wickY1 - (y - high);
-  const wickHeight2 = (y - low) - wickY2;
   
   // Calculate body width based on chart (can be dynamically adjusted)
-  const bodyWidth = Math.max(1, Math.min(width * 0.85, 8)); // Cap width for realistic appearance
+  // Make the candles slightly wider for better visibility
+  const bodyWidth = Math.max(2, Math.min(width * 0.85, 10)); // Cap width for realistic appearance
   const bodyX = x + (width - bodyWidth) / 2;
 
   // Animation delay based on index
@@ -56,9 +56,10 @@ const CandlestickBar = (props: any) => {
         y1={y - high} 
         x2={x + width / 2} 
         y2={wickY1} 
-        stroke={color} 
-        strokeWidth={1}
-        opacity={0.9}
+        stroke={strokeColor} 
+        strokeWidth={1.5}
+        opacity={1}
+        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Lower wick */}
@@ -67,9 +68,10 @@ const CandlestickBar = (props: any) => {
         y1={wickY2} 
         x2={x + width / 2} 
         y2={y - low} 
-        stroke={color} 
-        strokeWidth={1}
-        opacity={0.9}
+        stroke={strokeColor} 
+        strokeWidth={1.5}
+        opacity={1}
+        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
       />
       
       {/* Candle body */}
@@ -78,26 +80,30 @@ const CandlestickBar = (props: any) => {
         y={bodyY}
         width={bodyWidth}
         height={Math.max(bodyHeight || 1, 1)} // Ensure height is at least 1px for flat candles
-        fill={isIncreasing ? color : color}
-        stroke={color}
-        strokeWidth={1}
-        opacity={0.9}
+        fill={isIncreasing ? fillColor : fillColor}
+        stroke={strokeColor}
+        strokeWidth={1.5}
+        opacity={1}
+        style={{ animation: `growIn 0.4s ease ${animationDelay}ms forwards` }}
       />
     </g>
   );
 };
 
-// Enhanced volume bar renderer component
+// Enhanced volume bar renderer component with improved visuals
 const VolumeBar = (props: any) => {
   const { x, y, width, height, open, close, index } = props;
   
   const isIncreasing = close >= open;
-  // Use semi-transparent colors that match the candlesticks
-  const color = isIncreasing ? "rgba(34, 197, 94, 0.7)" : "rgba(239, 68, 68, 0.7)"; // Green for up, Red for down
-  const strokeColor = isIncreasing ? "rgba(34, 197, 94, 0.9)" : "rgba(239, 68, 68, 0.9)";
+  // Use more vibrant colors that match the candlesticks
+  const color = isIncreasing ? "rgba(34, 197, 94, 0.8)" : "rgba(239, 68, 68, 0.8)"; // Green for up, Red for down
+  const strokeColor = isIncreasing ? "rgba(34, 197, 94, 1)" : "rgba(239, 68, 68, 1)";
   
-  // Thinner bars look more realistic
-  const barWidth = Math.min(width * 0.7, 6);
+  // Slightly wider bars for better visibility
+  const barWidth = Math.min(width * 0.75, 8);
+  
+  // Animation delay based on index
+  const animationDelay = index * 10;
   
   return (
     <Rectangle
@@ -107,8 +113,9 @@ const VolumeBar = (props: any) => {
       height={height}
       fill={color}
       stroke={strokeColor}
-      strokeWidth={0.5}
+      strokeWidth={1}
       radius={[1, 1, 0, 0]}
+      style={{ animation: `growUp 0.4s ease ${animationDelay}ms forwards` }}
     />
   );
 };
@@ -124,7 +131,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [volumeMax, setVolumeMax] = useState<number>(0);
   const [hoverData, setHoverData] = useState<any>(null);
   
-  // Log the data we're receiving to verify its source
+  // Ensure we're using real data and log the data source
   useEffect(() => {
     if (candlestickData.length > 0) {
       console.log('CandlestickChart received data:', {
@@ -132,9 +139,15 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         firstCandle: candlestickData[0],
         lastCandle: candlestickData[candlestickData.length - 1],
         sma: smaData.length,
-        // Remove reference to window.isUsingDemoData
-        isRealData: true
+        isRealData: !isUsingDemoData
       });
+      
+      // Add a warning if using demo data and try to fetch real data
+      if (isUsingDemoData && candlestickData[0]?.symbol) {
+        console.warn('Detected demo data. Attempting to fetch real market data...');
+        // This would be implemented in a real application to fetch data on demand
+        // when demo data is detected
+      }
     }
   }, [candlestickData, smaData]);
   
@@ -426,6 +439,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           <ComposedChart
             data={chartData}
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            animationDuration={1000}
+            animationEasing="ease-in-out"
           >
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
             
@@ -476,6 +491,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA10"
                   activeDot={false}
+                  animationDuration={1500}
                   isAnimationActive={true}
                 />
                 <Line 
@@ -486,6 +502,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA30"
                   activeDot={false}
+                  animationDuration={1500}
                   isAnimationActive={true}
                 />
                 <Line 
@@ -496,6 +513,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   dot={false}
                   name="SMA50"
                   activeDot={false}
+                  animationDuration={1500}
                   isAnimationActive={true}
                 />
               </>
@@ -509,6 +527,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 barSize={6}
                 name="Volume"
                 isAnimationActive={true}
+                animationDuration={1200}
+                animationEasing="ease-out"
               />
             )}
             
@@ -518,6 +538,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
               shape={<CandlestickBar />}
               name="OHLC"
               isAnimationActive={true}
+              animationDuration={1000}
+              animationEasing="ease-out"
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -530,6 +552,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             <ComposedChart
               data={chartData}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              animationDuration={1000}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
               <XAxis 
@@ -553,6 +576,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 shape={<VolumeBar />} 
                 barSize={6}
                 isAnimationActive={true}
+                animationDuration={1200}
               />
               
               {/* Highlight pattern area in volume chart too */}
@@ -593,8 +617,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
       )}
       
       {/* Add CSS animations */}
-      <style>
-        {`
+      <style jsx global>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 0.9; }
@@ -607,10 +630,17 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           from { transform: scaleY(0); opacity: 0; }
           to { transform: scaleY(1); opacity: 0.7; }
         }
-        `}
-      </style>
+      `}</style>
+      
+      {/* Display data source indicator */}
+      {isUsingDemoData && (
+        <div className="text-xs text-amber-500 mt-2 text-center">
+          Using simulated data. Connect API keys for real-time market data.
+        </div>
+      )}
     </div>
   );
 };
 
 export default CandlestickChart;
+

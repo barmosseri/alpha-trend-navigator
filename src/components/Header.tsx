@@ -7,7 +7,9 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const currentTab = location.pathname === '/trading' ? 'trading' : 'watchlist';
+  // Ensure Trading is the first tab and Watchlist is the second
+// Ensure Trading is the first tab and Watchlist is the second
+const currentTab = location.pathname.includes('/watchlist') ? 'watchlist' : 'trading';
   
   return (
     <header className="bg-card border-b border-border py-4">

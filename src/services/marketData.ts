@@ -27,34 +27,27 @@ const CRYPTO_COMPARE_API_KEY = '26d7b71f0f39e0a3d961c89e984eb494ec9bd964b947ad11
  * Fetches stock or crypto data from Alpha Vantage API
  */
 export const fetchAssetData = async (symbol: string, isStock = true): Promise<Asset | null> => {
+  console.log(`Fetching asset data for ${symbol} (${isStock ? 'stock' : 'crypto'})`);
+  isUsingDemoData = false;
+  
   try {
-    console.log(`Fetching data for ${symbol}, isStock: ${isStock}`);
+    // Try Alpha Vantage first
+    const data = await fetchAlphaVantageData(symbol, isStock);
+    if (data) return data;
     
-    // First try to use the API
-    let asset = await fetchAlphaVantageData(symbol, isStock);
+    // If Alpha Vantage fails, try web scraping approach
+    console.log('Alpha Vantage API failed, attempting to scrape data...');
+    const scrapedData = await scrapeFinancialData(symbol, isStock);
+    if (scrapedData) return scrapedData;
     
-    // If API fails or returns null, fall back to scraping
-    if (!asset) {
-      console.log('API call failed, falling back to web scraping');
-      asset = await scrapeFinancialData(symbol, isStock);
-      if (asset) {
-        console.log('Successfully retrieved data via scraping');
-      }
-    }
-    
-    // If all methods fail, return null
-    if (!asset) {
-      console.error('All data fetching methods failed');
-      isUsingDemoData = true;
-      return null;
-    }
-    
-    isUsingDemoData = false;
-    return asset;
-  } catch (error) {
-    console.error('Error in fetchAssetData:', error);
+    // As a last resort, fallback to mock data
+    console.log('No real data available, falling back to demo data');
     isUsingDemoData = true;
-    return null;
+    return fallbackToMockAsset(symbol);
+  } catch (error) {
+    console.error('Error fetching asset data:', error);
+    isUsingDemoData = true;
+    return fallbackToMockAsset(symbol);
   }
 };
 
@@ -63,6 +56,7 @@ export const fetchAssetData = async (symbol: string, isStock = true): Promise<As
  */
 const fetchAlphaVantageData = async (symbol: string, isStock = true): Promise<Asset | null> => {
   try {
+    const API_KEY = API_KEY;
     const endpoint = isStock ? 'GLOBAL_QUOTE' : 'DIGITAL_CURRENCY_DAILY';
     
     const response = await axios.get(BASE_URL, {
@@ -139,71 +133,101 @@ const fetchAlphaVantageData = async (symbol: string, isStock = true): Promise<As
  */
 const scrapeFinancialData = async (symbol: string, isStock = true): Promise<Asset | null> => {
   try {
-    // Target a public financial data source based on asset type
-    const url = isStock 
-      ? `https://finance.yahoo.com/quote/${symbol}`
-      : `https://finance.yahoo.com/quote/${symbol}-USD`;
-    
-    console.log(`Scraping data for ${symbol} from ${url}`);
-    
-    // In a real implementation, you would:
-    // 1. Make a GET request to the URL
-    // 2. Parse the HTML response
-    // 3. Extract price, change, volume etc. from specific HTML elements
-    
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    if (isStock) {
+      // For stocks, try Yahoo Finance API endpoint (unofficial)
+      const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+        params: {
+          interval: '1d',
+          range: '1d'
+        }
+      });
+      
+      // Extract data from Yahoo Finance response
+      if (response.data && response.data.chart && response.data.chart.result) {
+        const result = response.data.chart.result[0];
+        const quote = result.indicators.quote[0];
+        const meta = result.meta;
+        
+        // Extract the needed data
+        const price = meta.regularMarketPrice || 0;
+        const prevClose = meta.previousClose || 0;
+        const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+        const volume = quote.volume ? quote.volume[quote.volume.length - 1] : 0;
+        
+        console.log(`Successfully scraped Yahoo Finance data for ${symbol}`);
+        
+        return {
+          id: symbol,
+          symbol: symbol,
+          name: meta.instrumentName || symbol,
+          type: 'stock',
+          price: price,
+          change: change,
+          marketCap: 0, // Not directly available
+          volume: volume,
+          rating: 5, // Default
+          trend: change > 0 ? 'RISING' : change < 0 ? 'FALLING' : 'NEUTRAL',
+          analysis: 'Analysis to be provided by AI component',
+          recommendation: change > 2 ? 'BUY' : change < -2 ? 'SELL' : 'HOLD' // Simple logic
+        };
       }
-    });
-    
-    // This is a simplified implementation - in reality you would use a proper HTML parser
-    const html = response.data;
-    
-    // Basic regex patterns to extract data (note: this is fragile and would need more robust parsing)
-    const priceMatch = html.match(/"regularMarketPrice":{"raw":([\d\.]+)/);
-    const changePercentMatch = html.match(/"regularMarketChangePercent":{"raw":([-\d\.]+)/);
-    const volumeMatch = html.match(/"regularMarketVolume":{"raw":([\d\.]+)/);
-    const prevCloseMatch = html.match(/"regularMarketPreviousClose":{"raw":([\d\.]+)/);
-    
-    if (!priceMatch) {
-      throw new Error('Could not extract price from scraped content');
+    } else {
+      // For crypto, try CryptoCompare
+      const response = await axios.get(`${CRYPTO_COMPARE_URL}/price`, {
+        params: {
+          fsym: symbol,
+          tsyms: 'USD',
+          api_key: CRYPTO_COMPARE_API_KEY
+        }
+      });
+      
+      if (response.data && response.data.USD) {
+        const price = response.data.USD;
+        
+        // Get additional data for the change
+        const historyResponse = await axios.get(`${CRYPTO_COMPARE_URL}/v2/histoday`, {
+          params: {
+            fsym: symbol,
+            tsym: 'USD',
+            limit: 2,
+            api_key: CRYPTO_COMPARE_API_KEY
+          }
+        });
+        
+        let change = 0;
+        let volume = 1000000; // Default
+        
+        if (historyResponse.data && historyResponse.data.Data && historyResponse.data.Data.Data) {
+          const historyData = historyResponse.data.Data.Data;
+          if (historyData.length >= 2) {
+            const prevPrice = historyData[0].close;
+            change = ((price - prevPrice) / prevPrice) * 100;
+            volume = historyData[1].volumeto || volume;
+          }
+        }
+        
+        console.log(`Successfully scraped CryptoCompare data for ${symbol}`);
+        
+        return {
+          id: symbol,
+          symbol: symbol,
+          name: `${symbol} (Crypto)`,
+          type: 'crypto',
+          price: price,
+          change: change,
+          marketCap: 0, // Not directly available
+          volume: volume,
+          rating: 5, // Default
+          trend: change > 0 ? 'RISING' : change < 0 ? 'FALLING' : 'NEUTRAL',
+          analysis: 'Analysis to be provided by AI component',
+          recommendation: change > 2 ? 'BUY' : change < -2 ? 'SELL' : 'HOLD' // Simple logic
+        };
+      }
     }
     
-    const price = parseFloat(priceMatch[1]);
-    const changePercent = changePercentMatch ? parseFloat(changePercentMatch[1]) : 0;
-    const volume = volumeMatch ? parseInt(volumeMatch[1]) : 0;
-    const prevClose = prevCloseMatch ? parseFloat(prevCloseMatch[1]) : 0;
-    
-    // Generate a unique ID
-    const id = `${symbol.toLowerCase()}-${Date.now()}`;
-    
-    // Define recommendation based on change percent
-    let recommendation: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
-    if (changePercent > 1.5) recommendation = 'BUY';
-    else if (changePercent < -1.5) recommendation = 'SELL';
-    
-    // Define trend based on change percent
-    let trend: 'RISING' | 'FALLING' | 'NEUTRAL' = 'NEUTRAL';
-    if (changePercent > 0) trend = 'RISING';
-    else if (changePercent < 0) trend = 'FALLING';
-    
-    return {
-      id,
-      name: symbol,
-      symbol,
-      price,
-      change: changePercent,
-      volume,
-      marketCap: price * volume,
-      type: isStock ? 'stock' : 'crypto',
-      recommendation,
-      trend,
-      rating: 5, // Default rating on a scale of 1-10
-      analysis: 'Analysis based on real-time market data'
-    };
+    return null; // If we couldn't scrape any data
   } catch (error) {
-    console.error(`Scraping error for ${symbol}:`, error);
+    console.error('Error scraping financial data:', error);
     return null;
   }
 };
@@ -248,17 +272,45 @@ export const fetchCandlestickData = async (
   timeframe: '30d' | '90d' | '1y' = '90d'
 ): Promise<CandlestickData[]> => {
   try {
-    // Try Alpha Vantage first
-    const alphaVantageData = await fetchAlphaVantageCandlestickData(symbol, isStock, timeframe);
-    if (alphaVantageData.length > 0) {
-      return alphaVantageData;
+    // Reset the demo data flag - we're going to try to get real data
+    isUsingDemoData = false;
+    
+    // Try multiple data sources in parallel for faster response and better reliability
+    const [alphaVantageData, scrapedData, finnhubData] = await Promise.allSettled([
+      fetchAlphaVantageCandlestickData(symbol, isStock, timeframe),
+      scrapeCandlestickData(symbol, isStock, timeframe),
+      isStock ? fetchStooqHistoricalData(symbol) : fetchCryptoHistoricalData(symbol)
+    ]);
+    
+    // Check results in order of reliability
+    if (alphaVantageData.status === 'fulfilled' && alphaVantageData.value.length > 0) {
+      console.log('Using Alpha Vantage data for', symbol);
+      return alphaVantageData.value;
     }
     
-    // If Alpha Vantage fails, try scraping alternatives
-    console.log('Alpha Vantage candlestick data failed, trying alternative sources...');
-    const scrapedCandlestickData = await scrapeCandlestickData(symbol, isStock, timeframe);
-    if (scrapedCandlestickData.length > 0) {
-      return scrapedCandlestickData;
+    if (finnhubData.status === 'fulfilled' && finnhubData.value.length > 0) {
+      console.log('Using Finnhub/Stooq data for', symbol);
+      return finnhubData.value;
+    }
+    
+    if (scrapedData.status === 'fulfilled' && scrapedData.value.length > 0) {
+      console.log('Using scraped data for', symbol);
+      return scrapedData.value;
+    }
+    
+    // If all real data sources failed, try one more aggressive web scraping approach
+    console.log('All primary data sources failed, attempting aggressive web scraping...');
+    try {
+      const lastResortData = await (isStock 
+        ? fetchYahooFinanceData(symbol, timeframe)
+        : fetchCryptoCompareData(symbol, timeframe));
+      
+      if (lastResortData.length > 0) {
+        console.log('Successfully retrieved data through aggressive scraping');
+        return lastResortData;
+      }
+    } catch (scrapeError) {
+      console.error('Aggressive scraping failed:', scrapeError);
     }
     
     // As a last resort, use mock data
@@ -271,6 +323,79 @@ export const fetchCandlestickData = async (
     console.error('Error fetching candlestick data:', error);
     isUsingDemoData = true;
     return generateMockCandlestickData(symbol, timeframe);
+  }
+};
+
+// Additional data source for Yahoo Finance (web scraping approach)
+const fetchYahooFinanceData = async (symbol: string, timeframe: '30d' | '90d' | '1y'): Promise<CandlestickData[]> => {
+  try {
+    // Determine the range based on timeframe
+    const range = timeframe === '30d' ? '1mo' : timeframe === '90d' ? '3mo' : '1y';
+    
+    // Use Yahoo Finance API endpoint (unofficial)
+    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+      params: {
+        interval: '1d',
+        range: range
+      }
+    });
+    
+    if (response.data?.chart?.result?.[0]) {
+      const result = response.data.chart.result[0];
+      const timestamps = result.timestamp || [];
+      const quote = result.indicators.quote[0] || {};
+      
+      if (timestamps.length > 0 && quote.open) {
+        return timestamps.map((timestamp: number, index: number) => ({
+          date: new Date(timestamp * 1000).toISOString().split('T')[0],
+          open: quote.open[index] || 0,
+          high: quote.high[index] || 0,
+          low: quote.low[index] || 0,
+          close: quote.close[index] || 0,
+          volume: quote.volume[index] || 0
+        }));
+      }
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching Yahoo Finance data:', error);
+    return [];
+  }
+};
+
+// Additional data source for CryptoCompare
+const fetchCryptoCompareData = async (symbol: string, timeframe: '30d' | '90d' | '1y'): Promise<CandlestickData[]> => {
+  try {
+    // Determine the limit based on timeframe
+    const limit = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+    
+    const response = await axios.get(`${CRYPTO_COMPARE_URL}/v2/histoday`, {
+      params: {
+        fsym: symbol,
+        tsym: 'USD',
+        limit: limit,
+        api_key: CRYPTO_COMPARE_API_KEY
+      }
+    });
+    
+    if (response.data?.Data?.Data) {
+      const historyData = response.data.Data.Data;
+      
+      return historyData.map((item: any) => ({
+        date: new Date(item.time * 1000).toISOString().split('T')[0],
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+        volume: item.volumefrom
+      }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching CryptoCompare data:', error);
+    return [];
   }
 };
 
@@ -874,50 +999,5 @@ const generateMockCandlestickData = (symbol: string, timeframe: '30d' | '90d' | 
   }
   
   return candlestickData;
-};
-
-/**
- * Scrapes historical candlestick data when API access is not available
- */
-export const scrapeHistoricalData = async (symbol: string, isStock = true): Promise<CandlestickData[]> => {
-  try {
-    // Target URL for historical data
-    const url = isStock 
-      ? `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`
-      : `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}-USD?interval=1d&range=3mo`;
-    
-    console.log(`Scraping historical data for ${symbol} from ${url}`);
-    
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    
-    const data = response.data;
-    const quotes = data.chart.result[0].indicators.quote[0];
-    const timestamps = data.chart.result[0].timestamp;
-    
-    if (!quotes || !timestamps) {
-      throw new Error('Invalid response format for historical data');
-    }
-    
-    return timestamps.map((timestamp: number, index: number) => {
-      const date = new Date(timestamp * 1000).toISOString().split('T')[0];
-      return {
-        date,
-        open: quotes.open[index] || 0,
-        high: quotes.high[index] || 0,
-        low: quotes.low[index] || 0,
-        close: quotes.close[index] || 0,
-        volume: quotes.volume[index] || 0
-      };
-    }).filter((candle: CandlestickData) => 
-      candle.open && candle.high && candle.low && candle.close
-    );
-  } catch (error) {
-    console.error(`Error scraping historical data for ${symbol}:`, error);
-    return [];
-  }
 };
 
