@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockAssets, generateMockCandlestickData, generateMockSMAData } from '@/lib/mockData';
+// Removed mock data imports to ensure we only use real data
 import { toast } from '@/components/ui/use-toast';
 
 // Import our new components
@@ -59,20 +59,27 @@ const AssetDetail = () => {
 
       try {
         // Try to fetch from API first
-          const symbol = id;
-          const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
-          const fetchedAsset = await fetchAssetData(symbol, isStock);
-          
-          if (fetchedAsset) {
-            setAsset(fetchedAsset);
-          } else {
-          // Only as a last resort, check in already loaded assets
+        const symbol = id;
+        const isStock = !symbol.includes('BTC') && !symbol.includes('ETH'); // Simple check
+        const fetchedAsset = await fetchAssetData(symbol, isStock);
+        
+        if (fetchedAsset) {
+          setAsset(fetchedAsset);
+        } else {
+          // Check in already loaded assets
           const cachedAsset = assets.find(a => a.id === id);
           if (cachedAsset) {
             setAsset(cachedAsset);
             console.log('Using cached asset data for', id);
           } else {
-            throw new Error('Could not fetch asset data');
+            toast({
+              title: "Data Unavailable",
+              description: "Could not fetch real-time data for this asset. Please try again later or check another asset.",
+              variant: "destructive"
+            });
+            // Navigate back or show empty state
+            setIsLoading(false);
+            return;
           }
         }
       } catch (error) {
@@ -90,7 +97,7 @@ const AssetDetail = () => {
     loadAssetData();
   }, [id, assets]);
   
-  // Load chart data - updated to use our multi-source data
+  // Load chart data - updated to use our multi-source data with enhanced error handling
   useEffect(() => {
     if (!asset) return;
     
@@ -102,34 +109,65 @@ const AssetDetail = () => {
         
         console.log('Fetching chart data for', symbol, isStock);
         
-        // Try to get combined data from multiple sources first
+        // Try multiple data sources in sequence for maximum reliability
+        let chartData: CandlestickData[] = [];
+        
+        // 1. Try to get combined data from multiple sources first
+        console.log('Attempting to fetch combined historical data...');
         const combinedData = await combineHistoricalData(symbol, isStock);
         
         if (combinedData.length > 0) {
-          console.log('Using combined historical data from real sources');
+          console.log(`Successfully retrieved ${combinedData.length} data points from combined sources`);
+          chartData = combinedData;
+        } else {
+          // 2. Try Alpha Vantage as a fallback
+          console.log('Combined data unavailable, trying Alpha Vantage directly...');
+          const alphaVantageData = await fetchCandlestickData(symbol, isStock, timeframe);
+          
+          if (alphaVantageData.length > 0) {
+            console.log(`Successfully retrieved ${alphaVantageData.length} data points from Alpha Vantage`);
+            chartData = alphaVantageData;
+          } else {
+            // 3. Try web scraping as a last resort
+            console.log('Alpha Vantage data unavailable, attempting web scraping...');
+            
+            // Import the RSS service which has web scraping capabilities
+            const { fetchAndParseRSSFeeds } = await import('@/services/rssParsingService');
+            
+            // Use RSS feeds to extract any price data mentioned in news
+            const rssData = await fetchAndParseRSSFeeds(symbol, true);
+            
+            if (rssData.length > 0) {
+              console.log('Found some price mentions in RSS feeds, but not enough for a chart');
+              toast({
+                title: "Limited Data Available",
+                description: "Only limited price data could be found. Chart may be incomplete.",
+                variant: "warning"
+              });
+            } else {
+              throw new Error('No chart data available from any source');
+            }
+          }
+        }
+        
+        if (chartData.length > 0) {
           // Filter based on selected timeframe
-          const filteredData = filterCandlesticksByTimeframe(combinedData, timeframe);
+          const filteredData = filterCandlesticksByTimeframe(chartData, timeframe);
           setCandlestickData(filteredData);
           const sma = generateSMAData(filteredData);
           setSmaData(sma);
+          
+          console.log(`Successfully processed ${filteredData.length} data points for the chart`);
         } else {
-          console.log('Falling back to Alpha Vantage data');
-          // Try Alpha Vantage as a second option
-          const data = await fetchCandlestickData(symbol, isStock, timeframe);
-        
-          if (data.length > 0) {
-            setCandlestickData(data);
-            const sma = generateSMAData(data);
-            setSmaData(sma);
-          } else {
-            throw new Error('No real chart data available');
-          }
+          throw new Error('Insufficient data points for chart rendering');
         }
       } catch (error) {
         console.error('Error loading chart data:', error);
+        setCandlestickData([]);
+        setSmaData([]);
         toast({
-          title: "Error",
-          description: "Could not fetch real-time chart data. Please check your API keys and connection.",
+          title: "Data Unavailable",
+          description: "Could not fetch real-time chart data from any source. Please try a different asset or check your network connection.",
           variant: "destructive"
         });
       }
@@ -171,9 +209,23 @@ const AssetDetail = () => {
     const loadNews = async () => {
       try {
         const newsItems = await fetchAssetNews(asset.symbol);
-        setNewsItems(newsItems);
+        if (newsItems.length > 0) {
+          setNewsItems(newsItems);
+        } else {
+          console.warn('No news data available for', asset.symbol);
+          toast({
+            title: "News Unavailable",
+            description: "Could not fetch news data for this asset. Using technical analysis only.",
+            variant: "warning"
+          });
+        }
       } catch (error) {
         console.error('Error loading news:', error);
+        toast({
+          title: "News Data Error",
+          description: "Failed to load news data. Using technical analysis only.",
+          variant: "warning"
+        });
       }
     };
     
@@ -183,9 +235,23 @@ const AssetDetail = () => {
       
       try {
         const data = await fetchOnChainData(asset.symbol);
-        setOnChainData(data);
+        if (data) {
+          setOnChainData(data);
+        } else {
+          console.warn('No on-chain data available for', asset.symbol);
+          toast({
+            title: "On-Chain Data Unavailable",
+            description: "Could not fetch on-chain data for this cryptocurrency. Using price data only.",
+            variant: "warning"
+          });
+        }
       } catch (error) {
         console.error('Error loading on-chain data:', error);
+        toast({
+          title: "On-Chain Data Error",
+          description: "Failed to load on-chain data. Using price data only.",
+          variant: "warning"
+        });
       }
     };
     
