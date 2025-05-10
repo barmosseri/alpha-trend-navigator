@@ -214,7 +214,7 @@ const AssetDetail = () => {
     if (!asset || !candlestickData.length) return;
     
     // Mock functions for demonstration
-    const generatePricePrediction = (asset, candlestickData) => {
+    const generatePricePrediction = (asset: any, candlestickData: any) => {
       // In a real app, this would call an AI model
       const randomProbability = Math.random() * 100;
       const isPositive = randomProbability > 40;
@@ -232,7 +232,8 @@ const AssetDetail = () => {
       };
     };
     
-    const generateTechnicalIndicators = (candlestickData) => {
+    const generateTechnicalIndicators = (candlestickData: any) => {
+      // ... keep existing code (technical indicators generation)
       const indicators = [
         {
           name: 'RSI (14)',
@@ -295,6 +296,7 @@ const AssetDetail = () => {
     
     // Mock function for on-chain data
     const fetchOnChainData = async (symbol: string) => {
+      // ... keep existing code (on-chain data fetching)
       if (!symbol.includes('BTC') && !symbol.includes('ETH')) return null;
       
       // Generate mock data
@@ -407,11 +409,11 @@ const AssetDetail = () => {
   };
   
   // Add feedback handler for the AI
-  const handleAIFeedback = (feedback) => {
+  const handleAIFeedback = (feedback: any) => {
     if (!asset || !prediction) return;
     
     // Mock function for updating model weights
-    const updateModelWeights = (symbol, probability, feedback) => {
+    const updateModelWeights = (symbol: string, probability: number, feedback: string) => {
       console.log(`Updating model weights for ${symbol} based on feedback: ${feedback}`);
       // In a real app, this would update an AI model
     };
@@ -775,3 +777,112 @@ const AssetDetail = () => {
             {asset?.type === 'crypto' && (
               <TabsTrigger value="on-chain">On-Chain Analytics</TabsTrigger>
             )}
+          </TabsList>
+
+          {/* Add TabsContent here */}
+          <TabsContent value="ai-analysis">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Price Prediction</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>AI price prediction functionality will be shown here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Trading Recommendations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Trading recommendations based on AI analysis will be shown here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="technical">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Technical Indicators</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Technical indicators will be displayed here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Signal Strength</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Technical signal strength and analysis will be shown here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="patterns">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detected Patterns</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Chart patterns will be displayed here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pattern Analysis</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Pattern analysis and implications will be shown here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="on-chain">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Network Metrics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Cryptocurrency on-chain metrics will be displayed here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Blockchain Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>Blockchain activity analysis will be shown here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+export default AssetDetail;
