@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Asset, CandlestickData, SMAData, PatternResult } from '@/lib/types';
 import { fetchAssetData, fetchCandlestickData, generateSMAData, fetchAssetNews } from '@/services/marketData';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, Newspaper } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, Newspaper, ArrowUp, ArrowDown } from 'lucide-react';
 import CandlestickChart from '@/components/CandlestickChart';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -16,16 +16,22 @@ import { useAssets } from '@/contexts/AssetsContext';
 import AssetHeader from '@/components/AssetHeader';
 import PatternDetection from '@/components/PatternDetection';
 import PatternDetectionFeatures from '@/components/PatternDetectionFeatures';
+import { useToast } from "@/hooks/use-toast";
 
 const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { assets, addToWatchlist, removeFromWatchlist, isInWatchlist } = useAssets();
+  const { toast } = useToast();
   
   const [asset, setAsset] = useState<Asset | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [candlestickData, setCandlestickData] = useState<CandlestickData[]>([]);
   const [smaData, setSmaData] = useState<SMAData[]>([]);
   const [timeframe, setTimeframe] = useState<'30d' | '90d' | '1y'>('90d');
+  
+  // Add state for chart display options
+  const [showSMA, setShowSMA] = useState(true);
+  const [showVolume, setShowVolume] = useState(true);
   
   // Add new state for AI components
   const [prediction, setPrediction] = useState(null);
@@ -88,7 +94,7 @@ const AssetDetail = () => {
     };
     
     loadAssetData();
-  }, [id, assets]);
+  }, [id, assets, toast]);
   
   // Load chart data - updated to use our multi-source data with enhanced error handling
   useEffect(() => {
@@ -105,42 +111,59 @@ const AssetDetail = () => {
         // Try multiple data sources in sequence for maximum reliability
         let chartData: CandlestickData[] = [];
         
-        // 1. Try to get combined data from multiple sources first
-        console.log('Attempting to fetch combined historical data...');
-        const combinedData = await combineHistoricalData(symbol, isStock);
+        // First, let's try to get data directly from the API
+        console.log('Attempting to fetch historical data...');
         
-        if (combinedData.length > 0) {
-          console.log(`Successfully retrieved ${combinedData.length} data points from combined sources`);
-          chartData = combinedData;
-        } else {
-          // 2. Try Alpha Vantage as a fallback
-          console.log('Combined data unavailable, trying Alpha Vantage directly...');
-          const alphaVantageData = await fetchCandlestickData(symbol, isStock, timeframe);
+        try {
+          // Try to fetch from direct API source
+          const histData = await fetchCandlestickData(symbol, isStock, timeframe);
           
-          if (alphaVantageData.length > 0) {
-            console.log(`Successfully retrieved ${alphaVantageData.length} data points from Alpha Vantage`);
-            chartData = alphaVantageData;
-          } else {
-            // 3. Try web scraping as a last resort
-            console.log('Alpha Vantage data unavailable, attempting web scraping...');
-            
-            // Import the RSS service which has web scraping capabilities
-            const { fetchAndParseRSSFeeds } = await import('@/services/rssParsingService');
-            
-            // Use RSS feeds to extract any price data mentioned in news
-            const rssData = await fetchAndParseRSSFeeds(symbol, true);
-            
-            if (rssData.length > 0) {
-              console.log('Found some price mentions in RSS feeds, but not enough for a chart');
-              toast({
-                title: "Limited Data Available",
-                description: "Only limited price data could be found. Chart may be incomplete.",
-                variant: "warning"
-              });
-            } else {
-              throw new Error('No chart data available from any source');
-            }
+          if (histData && histData.length > 0) {
+            console.log(`Successfully retrieved ${histData.length} data points from API`);
+            chartData = histData;
           }
+        } catch (err) {
+          console.error('Error fetching from primary source:', err);
+        }
+        
+        if (chartData.length === 0) {
+          toast({
+            title: "Limited Data Available",
+            description: "Using sample data for chart visualization.",
+            variant: "warning"
+          });
+          
+          // Generate sample data if no real data available
+          const basePrice = asset.price;
+          const sampleData: CandlestickData[] = [];
+          const days = timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+          const today = new Date();
+          
+          for (let i = days; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            
+            // Generate some random but somewhat realistic price movements
+            const volatility = 0.02; // 2% daily volatility
+            const randomChange = (Math.random() - 0.5) * volatility * basePrice;
+            const open = i === days ? basePrice : sampleData[0].close;
+            const close = open + randomChange;
+            const high = Math.max(open, close) + (Math.random() * volatility * basePrice);
+            const low = Math.min(open, close) - (Math.random() * volatility * basePrice);
+            const volume = Math.round(Math.random() * 1000000);
+            
+            sampleData.unshift({
+              date: date.toISOString().split('T')[0],
+              open,
+              high,
+              low,
+              close,
+              volume
+            });
+          }
+          
+          chartData = sampleData;
+          console.log('Using generated sample data for chart visualization');
         }
         
         if (chartData.length > 0) {
@@ -167,7 +190,7 @@ const AssetDetail = () => {
     };
     
     loadChartData();
-  }, [asset, timeframe]);
+  }, [asset, timeframe, toast]);
   
   // Add helper function to filter candlestick data by timeframe
   const filterCandlesticksByTimeframe = (
@@ -189,6 +212,115 @@ const AssetDetail = () => {
   // Add new useEffect to generate AI predictions and analysis
   useEffect(() => {
     if (!asset || !candlestickData.length) return;
+    
+    // Mock functions for demonstration
+    const generatePricePrediction = (asset, candlestickData) => {
+      // In a real app, this would call an AI model
+      const randomProbability = Math.random() * 100;
+      const isPositive = randomProbability > 40;
+      
+      return {
+        direction: isPositive ? 'up' : 'down',
+        probability: randomProbability,
+        targetPrice: isPositive ? asset.price * 1.15 : asset.price * 0.85,
+        timeframe: '30 days',
+        explanation: [
+          'Based on recent price action and volume patterns',
+          'Technical indicators suggest a potential breakout',
+          'Similar historical patterns resulted in price movement'
+        ]
+      };
+    };
+    
+    const generateTechnicalIndicators = (candlestickData) => {
+      const indicators = [
+        {
+          name: 'RSI (14)',
+          value: Math.random() * 100,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Relative Strength Index measures momentum'
+        },
+        {
+          name: 'MACD',
+          value: (Math.random() - 0.5) * 2,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Moving Average Convergence/Divergence'
+        },
+        {
+          name: 'Bollinger Bands',
+          value: Math.random() * 2,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Measures price volatility relative to moving averages'
+        },
+        {
+          name: 'Stochastic Oscillator',
+          value: Math.random() * 100,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Compares closing price to price range over time'
+        },
+        {
+          name: 'ADX',
+          value: Math.random() * 100,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Average Directional Index measures trend strength'
+        },
+        {
+          name: 'OBV',
+          value: (Math.random() * 1000000),
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'On-Balance Volume measures buying/selling pressure'
+        },
+        {
+          name: 'ATR',
+          value: asset.price * Math.random() * 0.05,
+          signal: 'neutral',
+          description: 'Average True Range measures volatility'
+        },
+        {
+          name: 'CCI',
+          value: (Math.random() - 0.5) * 400,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Commodity Channel Index identifies cyclical trends'
+        },
+        {
+          name: 'MFI',
+          value: Math.random() * 100,
+          signal: Math.random() > 0.6 ? 'bullish' : Math.random() > 0.3 ? 'neutral' : 'bearish',
+          description: 'Money Flow Index analyzes price and volume'
+        }
+      ];
+      
+      return indicators;
+    };
+    
+    // Mock function for on-chain data
+    const fetchOnChainData = async (symbol: string) => {
+      if (!symbol.includes('BTC') && !symbol.includes('ETH')) return null;
+      
+      // Generate mock data
+      return {
+        activeAddresses: Math.floor(Math.random() * 1000000) + 500000,
+        networkHashRate: symbol.includes('BTC') ? Math.random() * 200 + 100 : null,
+        transactionVolume: Math.floor(Math.random() * 1000000) + 100000,
+        averageFee: Math.random() * 10,
+        mempool: {
+          pending: Math.floor(Math.random() * 10000) + 1000,
+          size: `${Math.floor(Math.random() * 100) + 50}MB`
+        },
+        marketMetrics: {
+          supply: symbol.includes('BTC') ? 21000000 : 120000000,
+          circulatingSupply: symbol.includes('BTC') ? 19000000 : 110000000,
+          marketCap: asset.marketCap,
+          realizedCap: asset.marketCap * (0.8 + Math.random() * 0.4),
+          nvtRatio: Math.random() * 100 + 50
+        },
+        sentiment: {
+          socialVolume: Math.floor(Math.random() * 100000) + 10000,
+          socialSentiment: Math.random(),
+          developerActivity: Math.floor(Math.random() * 500) + 100
+        }
+      };
+    };
     
     // Generate AI prediction
     const prediction = generatePricePrediction(asset, candlestickData);
@@ -252,7 +384,7 @@ const AssetDetail = () => {
     if (asset.type === 'crypto') {
       loadOnChainData();
     }
-  }, [asset, candlestickData]);
+  }, [asset, candlestickData, toast]);
   
   // Implement custom portfolio analysis functionality
   const runCustomPortfolioAnalysis = async () => {
@@ -277,6 +409,12 @@ const AssetDetail = () => {
   // Add feedback handler for the AI
   const handleAIFeedback = (feedback) => {
     if (!asset || !prediction) return;
+    
+    // Mock function for updating model weights
+    const updateModelWeights = (symbol, probability, feedback) => {
+      console.log(`Updating model weights for ${symbol} based on feedback: ${feedback}`);
+      // In a real app, this would update an AI model
+    };
     
     updateModelWeights(asset.symbol, prediction.probability, feedback);
     
@@ -551,7 +689,7 @@ const AssetDetail = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <NewsSection symbol={symbol || ''} />
+              <NewsSection symbol={asset.symbol} />
             </CardContent>
           </Card>
         </div>
@@ -637,650 +775,3 @@ const AssetDetail = () => {
             {asset?.type === 'crypto' && (
               <TabsTrigger value="on-chain">On-Chain Analytics</TabsTrigger>
             )}
-            <TabsTrigger value="news">News</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="ai-analysis" className="mt-4">
-            {prediction ? (
-              <ExplainableAI 
-                asset={asset}
-                prediction={prediction}
-                technicalIndicators={technicalIndicators}
-                onFeedback={handleAIFeedback}
-              />
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin mx-auto mb-4"></div>
-                <div>Generating AI analysis...</div>
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="technical" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Technical Analysis</CardTitle>
-                <CardDescription>
-                  Key technical indicators and signals
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {technicalIndicators.map((indicator, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="font-medium">{indicator.name}</div>
-                        <div className={cn(
-                          "flex items-center px-2 py-1 rounded-full text-xs",
-                          indicator.signal === 'bullish' ? "bg-app-green/20 text-app-green" : 
-                          indicator.signal === 'bearish' ? "bg-app-red/20 text-app-red" : 
-                          "bg-yellow-500/20 text-yellow-500"
-                        )}>
-                          {indicator.signal === 'bullish' ? (
-                            <>
-                              <TrendingUp className="h-3 w-3 mr-1" />
-                              <span>Bullish</span>
-                            </>
-                          ) : indicator.signal === 'bearish' ? (
-                            <>
-                              <TrendingDown className="h-3 w-3 mr-1" />
-                              <span>Bearish</span>
-                            </>
-                          ) : (
-                            <span>Neutral</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {indicator.description}
-                      </div>
-                      <div className="mt-2 text-sm">
-                        Value: <span className="font-medium">{indicator.value.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Add new tab for detailed pattern analysis */}
-          <TabsContent value="patterns" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Chart Pattern Analysis</CardTitle>
-                <CardDescription>
-                  Detailed analysis of detected chart patterns
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="font-medium">Pattern Overview</div>
-                    <p className="text-sm text-muted-foreground">
-                      Chart patterns are specific price formations that help predict future price movements. 
-                      Our AI system analyzes historical data from multiple sources to identify reliable patterns.
-                    </p>
-                    
-                    {selectedPattern ? (
-                      <div className="border rounded-lg p-4 mt-4">
-                        <div className="font-medium mb-2">
-                          {selectedPattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
-                        </div>
-                        <p className="text-sm mb-2">{selectedPattern.description}</p>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Signal:</span>
-                            <span className={cn(
-                              "ml-1 font-medium",
-                              selectedPattern.signal === 'bullish' ? "text-app-green" :
-                              selectedPattern.signal === 'bearish' ? "text-app-red" :
-                              "text-muted-foreground"
-                            )}>
-                              {selectedPattern.signal.charAt(0).toUpperCase() + selectedPattern.signal.slice(1)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Strength:</span>
-                            <span className="ml-1 font-medium">{Math.round(selectedPattern.strength * 100)}%</span>
-                          </div>
-                          {selectedPattern.level && (
-                            <div>
-                              <span className="text-muted-foreground">Price Level:</span>
-                              <span className="ml-1 font-medium">${selectedPattern.level.toFixed(2)}</span>
-                            </div>
-                          )}
-                          <div>
-                            <span className="text-muted-foreground">Pattern Period:</span>
-                            <span className="ml-1 font-medium">
-                              {new Date(selectedPattern.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
-                              {new Date(selectedPattern.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-muted-foreground">
-                        Select a pattern from the sidebar to see detailed analysis
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <div className="font-medium mb-4">Trading Implications</div>
-                    {selectedPattern ? (
-                      <div className="space-y-4">
-                        <div className="border rounded-lg p-4">
-                          <div className="font-medium mb-2">Entry Points</div>
-                          <div className="text-sm">
-                            {selectedPattern.signal === 'bullish' ? (
-                              <p>Consider entry positions on price confirmation above resistance. A good entry would be after the pattern is confirmed with increased volume.</p>
-                            ) : selectedPattern.signal === 'bearish' ? (
-                              <p>Consider entry positions on price confirmation below support. Wait for the pattern to complete before taking a position.</p>
-                            ) : (
-                              <p>This pattern suggests a period of consolidation. Wait for a breakout in either direction with increased volume before entering a position.</p>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="border rounded-lg p-4">
-                          <div className="font-medium mb-2">Price Targets</div>
-                          <div className="text-sm">
-                            {selectedPattern.patternType === 'HEAD_AND_SHOULDERS' && (
-                              <p>The price target from a head and shoulders pattern is typically the distance from the head to the neckline, projected from the breakdown point.</p>
-                            )}
-                            {selectedPattern.patternType === 'DOUBLE_TOP' && (
-                              <p>The price target from a double top is typically the height of the formation, measured from the breakdown point at the neckline.</p>
-                            )}
-                            {selectedPattern.patternType === 'DOUBLE_BOTTOM' && (
-                              <p>The price target from a double bottom is typically the height of the formation, measured from the breakout point at the neckline.</p>
-                            )}
-                            {(selectedPattern.patternType === 'ASCENDING_TRIANGLE' || 
-                              selectedPattern.patternType === 'DESCENDING_TRIANGLE' || 
-                              selectedPattern.patternType === 'SYMMETRICAL_TRIANGLE') && (
-                              <p>The price target from a triangle pattern is typically the height of the triangle measured from the breakout point.</p>
-                            )}
-                            {selectedPattern.patternType === 'SUPPORT' && (
-                              <p>Support levels often act as good entry points for long positions, with a stop loss just below the support level.</p>
-                            )}
-                            {selectedPattern.patternType === 'RESISTANCE' && (
-                              <p>Resistance levels can be used as exit points for long positions or entry points for short positions if the price fails to break through.</p>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="border rounded-lg p-4">
-                          <div className="font-medium mb-2">Risk Management</div>
-                          <div className="text-sm">
-                            <p>
-                              {selectedPattern.signal === 'bullish' ? (
-                                `Consider placing a stop loss below ${selectedPattern.patternType === 'SUPPORT' ? 'the support level' : 'the pattern low'} to manage risk.`
-                              ) : selectedPattern.signal === 'bearish' ? (
-                                `Consider placing a stop loss above ${selectedPattern.patternType === 'RESISTANCE' ? 'the resistance level' : 'the pattern high'} to manage risk.`
-                              ) : (
-                                "Wait for a clear breakout before entering a position, with a stop loss on the opposite side of the pattern."
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 text-muted-foreground">
-                        Select a pattern to see trading implications
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {asset?.type === 'crypto' && (
-            <TabsContent value="on-chain" className="mt-4">
-              {onChainData ? (
-                <OnChainAnalytics
-                  symbol={asset.symbol}
-                  onChainData={onChainData}
-                />
-              ) : (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin mx-auto mb-4"></div>
-                  <div>Loading on-chain data...</div>
-                </div>
-              )}
-            </TabsContent>
-          )}
-          
-          <TabsContent value="news" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Latest News</CardTitle>
-                <CardDescription>
-                  Recent news and market sentiment
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {newsItems.length > 0 ? (
-                  <div className="space-y-4">
-                    {newsItems.map((item, index) => (
-                      <div key={index} className="border-b pb-3 last:border-b-0">
-                        <div className="flex items-start gap-2">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full mt-2",
-                            item.sentiment === 'positive' ? "bg-app-green" :
-                            item.sentiment === 'negative' ? "bg-app-red" : "bg-yellow-500"
-                          )} />
-                          <div>
-                            <a 
-                              href={item.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="font-medium hover:underline"
-                            >
-                              {item.title}
-                            </a>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {new Date(item.publishedAt).toLocaleDateString()} · {item.source}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No recent news found for {asset?.symbol}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-      
-      {/* Detailed AI Report Section */}
-      {detailedReport && (
-        <div ref={reportSectionRef} className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div>Detailed AI Analysis Report: {asset.symbol}</div>
-                <div className="text-sm text-muted-foreground">
-                  Generated on {new Date(detailedReport.reportGenerated).toLocaleString()}
-                </div>
-              </CardTitle>
-              <CardDescription>
-                Comprehensive analysis powered by our proprietary AI algorithms
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Asset Summary */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Asset Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Current Price</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">${detailedReport.assetInfo.currentPrice.toFixed(2)}</div>
-                      <div className={cn(
-                        "flex items-center text-sm",
-                        detailedReport.assetInfo.change >= 0 ? "text-app-green" : "text-app-red"
-                      )}>
-                        {detailedReport.assetInfo.change >= 0 ? (
-                          <ArrowUp className="h-3 w-3 mr-1" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3 mr-1" />
-                        )}
-                        {Math.abs(detailedReport.assetInfo.change).toFixed(2)}%
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">AI Recommendation</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className={cn(
-                        "inline-block px-3 py-1 rounded-full font-medium",
-                        detailedReport.assetInfo.recommendation === 'BUY' ? "bg-app-green/20 text-app-green" :
-                        detailedReport.assetInfo.recommendation === 'SELL' ? "bg-app-red/20 text-app-red" :
-                          "bg-yellow-500/20 text-yellow-500"
-                      )}>
-                        {detailedReport.assetInfo.recommendation}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Forecast Confidence</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{detailedReport.pricePrediction.forecastConfidence}</div>
-                      <div className="text-sm text-muted-foreground">Based on model accuracy</div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-              
-              {/* Price Predictions */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Price Forecasts</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">1 Month Target</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold">${detailedReport.pricePrediction.oneMonth.toFixed(2)}</div>
-                      <div className={cn(
-                        "text-sm",
-                        detailedReport.pricePrediction.oneMonth > detailedReport.assetInfo.currentPrice ? "text-app-green" : "text-app-red"
-                      )}>
-                        {((detailedReport.pricePrediction.oneMonth - detailedReport.assetInfo.currentPrice) / detailedReport.assetInfo.currentPrice * 100).toFixed(2)}%
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">3 Month Target</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold">${detailedReport.pricePrediction.threeMonths.toFixed(2)}</div>
-                      <div className={cn(
-                        "text-sm",
-                        detailedReport.pricePrediction.threeMonths > detailedReport.assetInfo.currentPrice ? "text-app-green" : "text-app-red"
-                      )}>
-                        {((detailedReport.pricePrediction.threeMonths - detailedReport.assetInfo.currentPrice) / detailedReport.assetInfo.currentPrice * 100).toFixed(2)}%
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">6 Month Target</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold">${detailedReport.pricePrediction.sixMonths.toFixed(2)}</div>
-                      <div className={cn(
-                        "text-sm",
-                        detailedReport.pricePrediction.sixMonths > detailedReport.assetInfo.currentPrice ? "text-app-green" : "text-app-red"
-                      )}>
-                        {((detailedReport.pricePrediction.sixMonths - detailedReport.assetInfo.currentPrice) / detailedReport.assetInfo.currentPrice * 100).toFixed(2)}%
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">1 Year Target</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold">${detailedReport.pricePrediction.oneYear.toFixed(2)}</div>
-                      <div className={cn(
-                        "text-sm",
-                        detailedReport.pricePrediction.oneYear > detailedReport.assetInfo.currentPrice ? "text-app-green" : "text-app-red"
-                      )}>
-                        {((detailedReport.pricePrediction.oneYear - detailedReport.assetInfo.currentPrice) / detailedReport.assetInfo.currentPrice * 100).toFixed(2)}%
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-              
-              {/* Technical Analysis */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Multi-timeframe Technical Analysis</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Short Term (1-4 weeks)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Trend:</div>
-                        <div className={cn(
-                          "flex items-center",
-                          detailedReport.technicalAnalysis.shortTerm.trend === 'RISING' ? "text-app-green" : "text-app-red"
-                        )}>
-                          {detailedReport.technicalAnalysis.shortTerm.trend === 'RISING' ? (
-                            <TrendingUp className="h-4 w-4 mr-1" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 mr-1" />
-                          )}
-                          {detailedReport.technicalAnalysis.shortTerm.trend}
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Strength:</div>
-                        <div className="font-medium">{detailedReport.technicalAnalysis.shortTerm.strength}/10</div>
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-1 mt-2">Key Indicators:</div>
-                      <div className="space-y-1">
-                        {detailedReport.technicalAnalysis.shortTerm.indicators.map((indicator, idx) => (
-                          <div key={idx} className="flex justify-between text-xs">
-                            <span>{indicator.name}:</span>
-                            <span className={cn(
-                              indicator.signal === 'bullish' ? "text-app-green" :
-                              indicator.signal === 'bearish' ? "text-app-red" :
-                              "text-muted-foreground"
-                            )}>
-                              {indicator.signal}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Medium Term (1-3 months)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Trend:</div>
-                        <div className={cn(
-                          "flex items-center",
-                          detailedReport.technicalAnalysis.mediumTerm.trend === 'RISING' ? "text-app-green" : "text-app-red"
-                        )}>
-                          {detailedReport.technicalAnalysis.mediumTerm.trend === 'RISING' ? (
-                            <TrendingUp className="h-4 w-4 mr-1" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 mr-1" />
-                          )}
-                          {detailedReport.technicalAnalysis.mediumTerm.trend}
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Strength:</div>
-                        <div className="font-medium">{detailedReport.technicalAnalysis.mediumTerm.strength}/10</div>
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-1 mt-2">Key Indicators:</div>
-                      <div className="space-y-1">
-                        {detailedReport.technicalAnalysis.mediumTerm.indicators.map((indicator, idx) => (
-                          <div key={idx} className="flex justify-between text-xs">
-                            <span>{indicator.name}:</span>
-                            <span className={cn(
-                              indicator.signal === 'bullish' ? "text-app-green" :
-                              indicator.signal === 'bearish' ? "text-app-red" :
-                              "text-muted-foreground"
-                            )}>
-                              {indicator.signal}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Long Term (6-12 months)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Trend:</div>
-                        <div className={cn(
-                          "flex items-center",
-                          detailedReport.technicalAnalysis.longTerm.trend === 'RISING' ? "text-app-green" : "text-app-red"
-                        )}>
-                          {detailedReport.technicalAnalysis.longTerm.trend === 'RISING' ? (
-                            <TrendingUp className="h-4 w-4 mr-1" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 mr-1" />
-                          )}
-                          {detailedReport.technicalAnalysis.longTerm.trend}
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">Strength:</div>
-                        <div className="font-medium">{detailedReport.technicalAnalysis.longTerm.strength}/10</div>
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-1 mt-2">Key Indicators:</div>
-                      <div className="space-y-1">
-                        {detailedReport.technicalAnalysis.longTerm.indicators.map((indicator, idx) => (
-                          <div key={idx} className="flex justify-between text-xs">
-                            <span>{indicator.name}:</span>
-                            <span className={cn(
-                              indicator.signal === 'bullish' ? "text-app-green" :
-                              indicator.signal === 'bearish' ? "text-app-red" :
-                              "text-muted-foreground"
-                            )}>
-                              {indicator.signal}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-              
-              {/* Trading Strategies */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">AI-Generated Trading Strategies</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {detailedReport.tradingStrategies.map((strategy, idx) => (
-                    <Card key={idx}>
-                      <CardHeader className="py-3">
-                        <CardTitle className="text-sm">{strategy.strategyName}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="text-sm">{strategy.description}</div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Entry Points:</div>
-                          <div className="text-sm">{strategy.entryPoints}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Exit Points:</div>
-                          <div className="text-sm">{strategy.exitPoints}</div>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-muted-foreground">Risk/Reward Ratio:</div>
-                          <div className="text-sm font-medium">{strategy.riskRewardRatio}:1</div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Risk Analysis */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Risk Analysis</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Volatility Metrics</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between">
-                        <div className="text-sm">Volatility Score:</div>
-                        <div className="text-sm font-medium">{detailedReport.riskAnalysis.volatilityScore}/100</div>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="text-sm">Maximum Drawdown:</div>
-                        <div className="text-sm font-medium">{detailedReport.riskAnalysis.maximumDrawdown}</div>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="text-sm">Sharpe Ratio:</div>
-                        <div className="text-sm font-medium">{detailedReport.riskAnalysis.sharpeRatio}</div>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="text-sm">Value at Risk (95%):</div>
-                        <div className="text-sm font-medium">${detailedReport.riskAnalysis.valueAtRisk}</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Stress Test Scenarios</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {detailedReport.riskAnalysis.stressTestScenarios.map((scenario, idx) => (
-                        <div key={idx} className="flex justify-between">
-                          <div className="text-sm">{scenario.scenario}:</div>
-                          <div className="text-sm font-medium text-app-red">{scenario.expectedImpact}</div>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-              
-              {/* Sentiment Analysis */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Market Sentiment Analysis</h3>
-                <Card>
-                  <CardContent className="pt-6 space-y-4">
-                    <div className="flex flex-col items-center">
-                      <div className={cn(
-                        "h-24 w-24 rounded-full flex items-center justify-center text-white text-xl font-bold",
-                        detailedReport.sentimentAnalysis.overallSentiment === 'Positive' ? "bg-app-green" :
-                        detailedReport.sentimentAnalysis.overallSentiment === 'Negative' ? "bg-app-red" :
-                        "bg-yellow-500"
-                      )}>
-                        {detailedReport.sentimentAnalysis.sentimentScore}/100
-                      </div>
-                      <div className="mt-2 font-medium">
-                        {detailedReport.sentimentAnalysis.overallSentiment} Sentiment
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Trend: {detailedReport.sentimentAnalysis.sentimentTrend}
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{detailedReport.sentimentAnalysis.newsCount}</div>
-                        <div className="text-sm text-muted-foreground">News Articles Analyzed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{detailedReport.sentimentAnalysis.socialMediaMentions}</div>
-                        <div className="text-sm text-muted-foreground">Social Media Mentions</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-              
-              {/* Report Footer */}
-              <div className="text-center text-sm text-muted-foreground pt-4 border-t">
-                <p>This report is generated by AlphaTrend Navigator's AI engine and should not be considered financial advice.</p>
-                <p>Always conduct your own research before making investment decisions.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default AssetDetail;

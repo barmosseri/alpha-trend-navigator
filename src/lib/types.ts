@@ -15,6 +15,7 @@ export interface Asset {
   trend: 'RISING' | 'FALLING' | 'NEUTRAL';
   analysis?: string;
   recommendation: 'BUY' | 'SELL' | 'HOLD';
+  patterns?: PatternResult[]; // Add patterns property
 }
 
 export interface TrendingAsset {
@@ -35,6 +36,7 @@ export interface CandlestickData {
   low: number;
   close: number;
   volume: number;
+  symbol?: string; // Add optional symbol property
 }
 
 // SMA data structure
@@ -70,6 +72,8 @@ export interface PatternResult {
   strength: number;
   description: string;
   level?: number;
+  startIndex?: number; // Add startIndex property
+  endIndex?: number; // Add endIndex property
 }
 
 // News item
@@ -96,3 +100,62 @@ export interface PortfolioItem {
 
 // Watchlist
 export type WatchlistItem = Asset;
+
+// Add missing types mentioned in errors
+export interface AIPrediction {
+  direction: 'up' | 'down' | 'neutral';
+  probability: number;
+  targetPrice?: number;
+  timeframe: string;
+  explanation: string[];
+}
+
+export interface TechnicalIndicator {
+  name: string;
+  value: number;
+  signal: 'bullish' | 'bearish' | 'neutral';
+  description: string;
+}
+
+export interface DataSource {
+  id: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  type: 'api' | 'rss' | 'webscraper';
+  costPerRequest?: number;
+}
+
+export interface PortfolioAsset {
+  id: string;
+  symbol: string;
+  name: string;
+  allocation: number;
+  type: AssetType;
+  risk: number;
+  expectedReturn: number;
+  correlation?: Record<string, number>;
+}
+
+export interface OnChainData {
+  activeAddresses: number;
+  networkHashRate?: number;
+  transactionVolume: number;
+  averageFee: number;
+  mempool?: {
+    pending: number;
+    size: string;
+  };
+  marketMetrics: {
+    supply: number;
+    circulatingSupply: number;
+    marketCap: number;
+    realizedCap?: number;
+    nvtRatio?: number;
+  };
+  sentiment: {
+    socialVolume: number;
+    socialSentiment: number;
+    developerActivity: number;
+  };
+}
