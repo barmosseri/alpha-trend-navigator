@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import { NewsItem } from '@/lib/types';
@@ -51,7 +52,7 @@ export const fetchAndParseRSSFeeds = async (
       attributeNamePrefix: "@_"
     });
     
-    const rssSources = [];
+    const rssSources: string[] = [];
     
     // Add symbol-specific feeds
     rssSources.push(`${RSS_SOURCES.NASDAQ}${symbol}`);
