@@ -167,76 +167,197 @@ const PatternDetection: React.FC<PatternDetectionProps> = ({
             <TabsTrigger value="SUPPORT">Support/Res</TabsTrigger>
           </TabsList>
           
-          {isLoading ? (
-            <div className="py-12 flex items-center justify-center">
-              <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin"></div>
-            </div>
-          ) : filteredPatterns.length > 0 ? (
-            <div className="space-y-4">
-              {filteredPatterns.map((pattern, index) => (
-                <div key={index} className="border rounded-lg overflow-hidden">
-                  <div 
-                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent"
-                    onClick={() => onPatternSelect && onPatternSelect(pattern)}
-                  >
-                    <div className="flex items-center">
-                      {getPatternIcon(pattern.patternType)}
-                      <span className="font-medium ml-2">
-                        {pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
-                      </span>
-                      <Badge className={cn(
-                        "ml-2",
-                        pattern.signal === 'bullish' ? "bg-app-green hover:bg-app-green/90" : 
-                        pattern.signal === 'bearish' ? "bg-app-red hover:bg-app-red/90" : 
-                        "bg-secondary hover:bg-secondary/90"
-                      )}>
-                        {pattern.signal}
-                      </Badge>
+          <TabsContent value="all">
+            {isLoading ? (
+              <div className="py-12 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-t-app-blue rounded-full border-muted animate-spin"></div>
+              </div>
+            ) : filteredPatterns.length > 0 ? (
+              <div className="space-y-4">
+                {filteredPatterns.map((pattern, index) => (
+                  <div key={index} className="border rounded-lg overflow-hidden">
+                    <div 
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent"
+                      onClick={() => onPatternSelect && onPatternSelect(pattern)}
+                    >
+                      <div className="flex items-center">
+                        {getPatternIcon(pattern.patternType)}
+                        <span className="font-medium ml-2">
+                          {pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                        </span>
+                        <Badge className={cn(
+                          "ml-2",
+                          pattern.signal === 'bullish' ? "bg-app-green hover:bg-app-green/90" : 
+                          pattern.signal === 'bearish' ? "bg-app-red hover:bg-app-red/90" : 
+                          "bg-secondary hover:bg-secondary/90"
+                        )}>
+                          {pattern.signal}
+                        </Badge>
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="w-80 p-4">
+                            {getPatternDescription(pattern)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <Info className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="w-80 p-4">
-                          {getPatternDescription(pattern)}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center text-muted-foreground">
-              No {activeTab !== 'all' ? activeTab : ''} patterns detected
-            </div>
-          )}
-        </CardContent>
-        <Separator />
-        <CardFooter className="pt-4">
-          <div className="w-full">
-            <div className="text-sm font-medium mb-2">Pattern Distribution</div>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(patternCounts).map(([type, count]) => (
-                <div 
-                  key={type}
-                  className="flex items-center justify-between text-xs p-1 rounded hover:bg-accent cursor-pointer"
-                  onClick={() => setActiveTab(type)}
-                >
-                  <div className="flex items-center">
-                    {getPatternIcon(type)}
-                    <span className="ml-1">{type.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">
+                No patterns detected
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="bullish">
+            {!isLoading && filteredPatterns.length > 0 ? (
+              <div className="space-y-4">
+                {filteredPatterns.map((pattern, index) => (
+                  <div key={index} className="border rounded-lg overflow-hidden">
+                    <div 
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent"
+                      onClick={() => onPatternSelect && onPatternSelect(pattern)}
+                    >
+                      <div className="flex items-center">
+                        {getPatternIcon(pattern.patternType)}
+                        <span className="font-medium ml-2">
+                          {pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                        </span>
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="w-80 p-4">
+                            {getPatternDescription(pattern)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
-                  <span>{count}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">
+                No bullish patterns detected
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="bearish">
+            {!isLoading && filteredPatterns.length > 0 ? (
+              <div className="space-y-4">
+                {filteredPatterns.map((pattern, index) => (
+                  <div key={index} className="border rounded-lg overflow-hidden">
+                    <div 
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent"
+                      onClick={() => onPatternSelect && onPatternSelect(pattern)}
+                    >
+                      <div className="flex items-center">
+                        {getPatternIcon(pattern.patternType)}
+                        <span className="font-medium ml-2">
+                          {pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                        </span>
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="w-80 p-4">
+                            {getPatternDescription(pattern)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">
+                No bearish patterns detected
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="SUPPORT">
+            {!isLoading && filteredPatterns.length > 0 ? (
+              <div className="space-y-4">
+                {filteredPatterns.map((pattern, index) => (
+                  <div key={index} className="border rounded-lg overflow-hidden">
+                    <div 
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent"
+                      onClick={() => onPatternSelect && onPatternSelect(pattern)}
+                    >
+                      <div className="flex items-center">
+                        {getPatternIcon(pattern.patternType)}
+                        <span className="font-medium ml-2">
+                          {pattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                        </span>
+                        {pattern.level && (
+                          <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+                            ${pattern.level.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="w-80 p-4">
+                            {getPatternDescription(pattern)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">
+                No support/resistance levels detected
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+      <Separator />
+      <CardFooter className="pt-4">
+        <div className="w-full">
+          <div className="text-sm font-medium mb-2">Pattern Distribution</div>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(patternCounts).map(([type, count]) => (
+              <div 
+                key={type}
+                className="flex items-center justify-between text-xs p-1 rounded hover:bg-accent cursor-pointer"
+                onClick={() => setActiveTab(type)}
+              >
+                <div className="flex items-center">
+                  {getPatternIcon(type)}
+                  <span className="ml-1">{type.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}</span>
                 </div>
-              ))}
-            </div>
+                <span>{count}</span>
+              </div>
+            ))}
           </div>
-        </CardFooter>
-      </Card>
+        </div>
+      </CardFooter>
     </Card>
   );
 };
