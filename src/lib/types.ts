@@ -72,8 +72,8 @@ export interface PatternResult {
   strength: number;
   description: string;
   level?: number;
-  startIndex?: number; // Add startIndex property
-  endIndex?: number; // Add endIndex property
+  startIndex?: number;
+  endIndex?: number;
 }
 
 // News item
@@ -105,9 +105,12 @@ export type WatchlistItem = Asset;
 export interface AIPrediction {
   direction: 'up' | 'down' | 'neutral';
   probability: number;
-  targetPrice?: number;
+  targetPrice: number;
   timeframe: string;
   explanation: string[];
+  expectedMove: number; // Added missing property
+  supportLevels: number[]; // Added missing property
+  resistanceLevels: number[]; // Added missing property
 }
 
 export interface TechnicalIndicator {
@@ -122,18 +125,20 @@ export interface DataSource {
   name: string;
   priority: number;
   enabled: boolean;
-  type: 'api' | 'rss' | 'webscraper';
+  type: 'api' | 'rss' | 'webscraper' | 'stock' | 'crypto' | 'both'; // Updated to include all used types
   costPerRequest?: number;
+  apiKey?: string; // Added missing property
+  description?: string; // Added missing property
 }
 
-export interface PortfolioAsset {
-  id: string;
-  symbol: string;
-  name: string;
-  allocation: number;
-  type: AssetType;
-  risk: number;
-  expectedReturn: number;
+export interface PortfolioAsset extends Asset {
+  quantity: number;
+  totalValue: number;
+  allocationPercentage: number;
+  profitLoss: number;
+  allocation?: number;
+  risk?: number;
+  expectedReturn?: number;
   correlation?: Record<string, number>;
 }
 
@@ -142,6 +147,9 @@ export interface OnChainData {
   networkHashRate?: number;
   transactionVolume: number;
   averageFee: number;
+  transactionCount?: number; // Added missing property
+  difficulty?: number; // Added missing property
+  fees?: number; // Added missing property
   mempool?: {
     pending: number;
     size: string;

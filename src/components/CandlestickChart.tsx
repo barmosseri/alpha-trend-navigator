@@ -1,646 +1,250 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
   ComposedChart,
-  Bar,
   Line,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
-  Rectangle,
-  Legend
 } from 'recharts';
-import { isUsingDemoData, fetchCandlestickData } from '@/services/marketData';
 import { CandlestickData, SMAData, PatternResult } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { CalendarRange } from 'lucide-react';
+import { DateRange } from "react-day-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { cn } from "@/lib/utils";
 
 interface CandlestickChartProps {
   candlestickData: CandlestickData[];
   smaData?: SMAData[];
-  showSMA?: boolean;
-  showVolume?: boolean;
+  patterns?: PatternResult[];
   selectedPattern?: PatternResult | null;
+  onPatternSelect?: (pattern: PatternResult | null) => void;
 }
-
-// Enhanced Japanese candlestick renderer component with professional trading visuals
-const CandlestickBar = (props: any) => {
-  const { x, y, width, height, open, close, low, high, index } = props;
-  
-  const isIncreasing = close > open;
-  // Use more vibrant colors for better visualization
-  const fillColor = isIncreasing ? "#22C55E" : "#EF4444"; // Green for increasing, Red for decreasing
-  const strokeColor = isIncreasing ? "#22C55E" : "#EF4444";
-  
-  const bodyHeight = Math.abs(y - (isIncreasing ? open : close));
-  const bodyY = isIncreasing ? y : y - bodyHeight;
-  
-  const wickY1 = Math.min(y - open, y - close);
-  const wickY2 = Math.max(y - open, y - close);
-  
-  // Calculate body width based on chart (can be dynamically adjusted)
-  // Make the candles slightly wider for better visibility
-  const bodyWidth = Math.max(2, Math.min(width * 0.85, 10)); // Cap width for realistic appearance
-  const bodyX = x + (width - bodyWidth) / 2;
-
-  // Animation delay based on index
-  const animationDelay = index * 10;
-
-  return (
-    <g>
-      {/* Upper wick */}
-      <line 
-        x1={x + width / 2} 
-        y1={y - high} 
-        x2={x + width / 2} 
-        y2={wickY1} 
-        stroke={strokeColor} 
-        strokeWidth={1.5}
-        opacity={1}
-        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
-      />
-      
-      {/* Lower wick */}
-      <line 
-        x1={x + width / 2} 
-        y1={wickY2} 
-        x2={x + width / 2} 
-        y2={y - low} 
-        stroke={strokeColor} 
-        strokeWidth={1.5}
-        opacity={1}
-        style={{ animation: `fadeIn 0.3s ease ${animationDelay}ms forwards` }}
-      />
-      
-      {/* Candle body */}
-      <rect
-        x={bodyX}
-        y={bodyY}
-        width={bodyWidth}
-        height={Math.max(bodyHeight || 1, 1)} // Ensure height is at least 1px for flat candles
-        fill={isIncreasing ? fillColor : fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        opacity={1}
-        style={{ animation: `growIn 0.4s ease ${animationDelay}ms forwards` }}
-      />
-    </g>
-  );
-};
-
-// Enhanced volume bar renderer component with improved visuals
-const VolumeBar = (props: any) => {
-  const { x, y, width, height, open, close, index } = props;
-  
-  const isIncreasing = close >= open;
-  // Use more vibrant colors that match the candlesticks
-  const color = isIncreasing ? "rgba(34, 197, 94, 0.8)" : "rgba(239, 68, 68, 0.8)"; // Green for up, Red for down
-  const strokeColor = isIncreasing ? "rgba(34, 197, 94, 1)" : "rgba(239, 68, 68, 1)";
-  
-  // Slightly wider bars for better visibility
-  const barWidth = Math.min(width * 0.75, 8);
-  
-  // Animation delay based on index
-  const animationDelay = index * 10;
-  
-  return (
-    <Rectangle
-      x={x + (width - barWidth) / 2}
-      y={y}
-      width={barWidth}
-      height={height}
-      fill={color}
-      stroke={strokeColor}
-      strokeWidth={1}
-      radius={[1, 1, 0, 0]}
-      style={{ animation: `growUp 0.4s ease ${animationDelay}ms forwards` }}
-    />
-  );
-};
 
 const CandlestickChart: React.FC<CandlestickChartProps> = ({
   candlestickData,
-  smaData = [],
-  showSMA = true,
-  showVolume = true,
-  selectedPattern = null
+  smaData,
+  patterns,
+  selectedPattern,
+  onPatternSelect,
 }) => {
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [volumeMax, setVolumeMax] = useState<number>(0);
-  const [hoverData, setHoverData] = useState<any>(null);
-  
-  // Ensure we're using real data and log the data source
+  const [tooltipContent, setTooltipContent] = useState<string | null>(null);
+  const chartRef = useRef<any>(null);
+  const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
+    from: get3MonthsAgo(),
+    to: new Date(),
+  })
+  const [filteredData, setFilteredData] = useState<CandlestickData[]>([]);
+
   useEffect(() => {
-    if (candlestickData.length > 0) {
-      console.log('CandlestickChart received data:', {
-        candles: candlestickData.length,
-        firstCandle: candlestickData[0],
-        lastCandle: candlestickData[candlestickData.length - 1],
-        sma: smaData.length,
-        isRealData: !isUsingDemoData
+    if (dateRange?.from && dateRange?.to) {
+      const filtered = candlestickData.filter(item => {
+        const itemDate = new Date(item.date);
+        return itemDate >= dateRange.from && itemDate <= dateRange.to;
       });
-      
-      // Add a warning if using demo data and try to fetch real data
-      if (isUsingDemoData && candlestickData[0]?.symbol) {
-        console.warn('Detected demo data. Attempting to fetch real market data...');
-        // This would be implemented in a real application to fetch data on demand
-        // when demo data is detected
-      }
+      setFilteredData(filtered);
+    } else {
+      setFilteredData(candlestickData);
     }
-  }, [candlestickData, smaData]);
-  
-  // Process chart data with enhanced metrics
-  useEffect(() => {
-    if (candlestickData.length) {
-      // Get max volume for scaling
-      const maxVol = Math.max(...candlestickData.map(d => d.volume));
-      setVolumeMax(maxVol);
-      
-      // Enhanced data processing with more technical indicators
-      const enhanced = candlestickData.map((candle, index) => {
-        const smaPoint = smaData.find(sma => sma.date === candle.date);
-        
-        // Calculate percentage change from previous day
-        const previousDay = index > 0 ? candlestickData[index - 1] : null;
-        const dayChange = previousDay 
-          ? ((candle.close - previousDay.close) / previousDay.close) * 100 
-          : 0;
-          
-        // Calculate volatility as a 5-day rolling window
-        const volatilityWindow = candlestickData.slice(
-          Math.max(0, index - 5), 
-          index + 1
-        );
-        const prices = volatilityWindow.map(d => d.close);
-        const avgPrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
-        const volatility = prices.length > 1
-          ? Math.sqrt(prices.reduce((sum, price) => sum + Math.pow(price - avgPrice, 2), 0) / prices.length)
-          : 0;
-        
-        // Calculate Average True Range (ATR) for a 14-day period
-        const atrWindow = Math.min(14, index + 1);
-        let atr = 0;
-        
-        if (index > 0) {
-          const trValues = [];
-          for (let i = Math.max(0, index - atrWindow + 1); i <= index; i++) {
-            const curr = candlestickData[i];
-            const prev = i > 0 ? candlestickData[i - 1] : curr;
-            
-            // True Range = max(high - low, abs(high - prevClose), abs(low - prevClose))
-            const tr = Math.max(
-              curr.high - curr.low,
-              Math.abs(curr.high - prev.close),
-              Math.abs(curr.low - prev.close)
-            );
-            trValues.push(tr);
-          }
-          atr = trValues.reduce((sum, val) => sum + val, 0) / trValues.length;
-        }
-        
-        // Calculate MACD values (simplified)
-        const ema12 = calculateEMA(candlestickData.slice(0, index + 1).map(d => d.close), 12);
-        const ema26 = calculateEMA(candlestickData.slice(0, index + 1).map(d => d.close), 26);
-        const macd = ema12 - ema26;
-        
-        return {
-          date: candle.date,
-          // OHLC data
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          // For candlestick visualization
-          highLowRange: candle.high - candle.low,
-          // Volume data
-          volume: candle.volume,
-          // Scaled volume for combined chart (10% of chart height)
-          volumeScaled: (candle.volume / maxVol) * (Math.max(...candlestickData.map(d => d.high)) - Math.min(...candlestickData.map(d => d.low))) * 0.1,
-          // Change visualization data
-          dayChange,
-          volatility,
-          atr,
-          macd,
-          // Optional SMA values
-          sma10: smaPoint?.sma10,
-          sma30: smaPoint?.sma30,
-          sma50: smaPoint?.sma50,
-          // Add index for animation
-          index
-        };
-      });
-      
-      setChartData(enhanced);
+  }, [candlestickData, dateRange]);
+
+  const handleZoom = useCallback(() => {
+    if (chartRef.current) {
+      chartRef.current.zoom({ x: [0, 100] });
     }
-  }, [candlestickData, smaData]);
-  
-  // Calculate important metrics for display
-  const chartMetrics = useMemo(() => {
-    if (!candlestickData.length) return null;
-    
-    const firstCandle = candlestickData[0];
-    const lastCandle = candlestickData[candlestickData.length - 1];
-    const periodChange = ((lastCandle.close - firstCandle.close) / firstCandle.close) * 100;
-    
-    // Find highest high and lowest low
-    const highestHigh = Math.max(...candlestickData.map(d => d.high));
-    const lowestLow = Math.min(...candlestickData.map(d => d.low));
-    
-    // Calculate average daily volatility
-    const dailyChanges = candlestickData.slice(1).map((candle, i) => {
-      const prevCandle = candlestickData[i];
-      return Math.abs((candle.close - prevCandle.close) / prevCandle.close) * 100;
-    });
-    
-    const avgDailyVolatility = dailyChanges.reduce((sum, change) => sum + change, 0) / dailyChanges.length;
-    
-    return {
-      periodChange,
-      highestHigh,
-      lowestLow,
-      avgDailyVolatility,
-      startDate: firstCandle.date,
-      endDate: lastCandle.date
-    };
-  }, [candlestickData]);
-  
-  // Enhanced tooltip content with more technical details
-  const renderTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      setHoverData(data);
-      
+  }, []);
+
+  const handleTooltip = (content: string | null) => {
+    setTooltipContent(content);
+  };
+
+  const getSMAValue = (date: string, smaType: 'sma10' | 'sma30' | 'sma50'): number | undefined => {
+    if (!smaData) return undefined;
+    const dataPoint = smaData.find(item => item.date === date);
+    return dataPoint ? dataPoint[smaType] : undefined;
+  };
+
+  const renderTooltipContent = (o: any) => {
+    if (o && o.payload && o.payload.length > 0) {
+      const data = o.payload[0].payload;
+      const sma10 = getSMAValue(data.date, 'sma10');
+      const sma30 = getSMAValue(data.date, 'sma30');
+      const sma50 = getSMAValue(data.date, 'sma50');
+
       return (
-        <div className="bg-card shadow-md border rounded-lg p-3">
-          <div className="font-semibold border-b pb-1 mb-2">
-            {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
-            <div>Open:</div>
-            <div className="text-right font-medium">${data.open.toFixed(2)}</div>
-            <div>High:</div>
-            <div className="text-right font-medium">${data.high.toFixed(2)}</div>
-            <div>Low:</div>
-            <div className="text-right font-medium">${data.low.toFixed(2)}</div>
-            <div>Close:</div>
-            <div className={cn(
-              "text-right font-medium",
-              data.close >= data.open ? "text-app-green" : "text-app-red"
-            )}>
-              ${data.close.toFixed(2)}
-            </div>
-            <div>Change:</div>
-            <div className={cn(
-              "text-right font-medium",
-              data.dayChange >= 0 ? "text-app-green" : "text-app-red"
-            )}>
-              {data.dayChange >= 0 ? "+" : ""}{data.dayChange.toFixed(2)}%
-            </div>
-            <div>Volume:</div>
-            <div className="text-right font-medium">
-              {data.volume >= 1000000 
-                ? `${(data.volume / 1000000).toFixed(2)}M` 
-                : `${(data.volume / 1000).toFixed(0)}K`}
-            </div>
-            <div>ATR:</div>
-            <div className="text-right font-medium">${data.atr.toFixed(2)}</div>
-            {data.sma10 && (
-              <>
-                <div>SMA10:</div>
-                <div className="text-right font-medium">${data.sma10.toFixed(2)}</div>
-              </>
-            )}
-            {data.sma30 && (
-              <>
-                <div>SMA30:</div>
-                <div className="text-right font-medium">${data.sma30.toFixed(2)}</div>
-              </>
-            )}
-            {data.sma50 && (
-              <>
-                <div>SMA50:</div>
-                <div className="text-right font-medium">${data.sma50.toFixed(2)}</div>
-              </>
-            )}
-          </div>
+        <div className="p-2 bg-white border border-gray-300 rounded-md shadow-md">
+          <p className="font-bold text-gray-800">{format(new Date(data.date), 'MMM dd, yyyy')}</p>
+          <p className="text-gray-700">Open: {data.open.toFixed(2)}</p>
+          <p className="text-gray-700">High: {data.high.toFixed(2)}</p>
+          <p className="text-gray-700">Low: {data.low.toFixed(2)}</p>
+          <p className="text-gray-700">Close: {data.close.toFixed(2)}</p>
+          <p className="text-gray-700">Volume: {data.volume}</p>
+          {sma10 !== undefined && <p className="text-blue-500">SMA10: {sma10.toFixed(2)}</p>}
+          {sma30 !== undefined && <p className="text-green-500">SMA30: {sma30.toFixed(2)}</p>}
+          {sma50 !== undefined && <p className="text-red-500">SMA50: {sma50.toFixed(2)}</p>}
         </div>
       );
     }
-    
+
     return null;
   };
-  
-  // Helper function to calculate EMA
-  const calculateEMA = (prices: number[], period: number): number => {
-    if (prices.length < period) return prices[prices.length - 1];
-    
-    const k = 2 / (period + 1);
-    let emaValue = prices.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
-    
-    for (let i = period; i < prices.length; i++) {
-      emaValue = (prices[i] - emaValue) * k + emaValue;
-    }
-    
-    return emaValue;
+
+  const get3MonthsAgo = (): Date => {
+    const now = new Date();
+    now.setMonth(now.getMonth() - 3);
+    return now;
   };
-  
-  // Find min and max prices for the chart with proper padding
-  const prices = candlestickData.flatMap(d => [d.high, d.low]);
-  const minPrice = Math.floor(Math.min(...prices) * 0.99); // Add 1% padding
-  const maxPrice = Math.ceil(Math.max(...prices) * 1.01); // Add 1% padding
-  
-  // Pattern visualization
-  const patternStartIndex = selectedPattern 
-    ? candlestickData.findIndex(d => d.date === selectedPattern.startDate)
-    : -1;
-    
-  const patternEndIndex = selectedPattern 
-    ? candlestickData.findIndex(d => d.date === selectedPattern.endDate)
-    : -1;
-    
-  const patternStartDate = patternStartIndex >= 0 
-    ? candlestickData[patternStartIndex].date
-    : '';
-    
-  const patternEndDate = patternEndIndex >= 0 
-    ? candlestickData[patternEndIndex].date
-    : '';
-  
-  // Get pattern color based on signal with more vibrant colors
-  const getPatternColor = () => {
-    if (!selectedPattern) return 'rgba(99, 102, 241, 0.3)'; // Default blue
-    
-    if (selectedPattern.signal === 'bullish') {
-      return 'rgba(34, 197, 94, 0.3)'; // Green
-    } else if (selectedPattern.signal === 'bearish') {
-      return 'rgba(239, 68, 68, 0.3)'; // Red
-    } else {
-      return 'rgba(245, 158, 11, 0.3)'; // Yellow/orange
-    }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
-  
-  // Generate support/resistance lines if applicable
-  const renderSupportResistanceLines = () => {
-    if (!selectedPattern) return null;
-    
-    if (selectedPattern.patternType === 'SUPPORT' || selectedPattern.patternType === 'RESISTANCE') {
+
+  const renderChart = () => {
+    if (!filteredData || filteredData.length === 0) {
+      return <div className="text-center py-4">No data available for the selected date range.</div>;
+    }
+
+    const renderBrush = () => {
       return (
-        <ReferenceLine 
-          y={selectedPattern.level} 
-          stroke={selectedPattern.patternType === 'SUPPORT' ? "#22C55E" : "#EF4444"} 
-          strokeDasharray="3 3" 
-          strokeWidth={1.5}
-          label={{
-            value: `${selectedPattern.patternType === 'SUPPORT' ? 'Support' : 'Resistance'}: $${selectedPattern.level?.toFixed(2)}`,
-            position: 'insideBottomRight',
-            fill: selectedPattern.patternType === 'SUPPORT' ? "#22C55E" : "#EF4444",
-            fontSize: 12
-          }}
+        <ReferenceArea
+          y1={0}
+          y2={150000}
+          x1={formatDate(filteredData[0].date)}
+          x2={formatDate(filteredData[filteredData.length - 1].date)}
+          stroke="rgba(102, 51, 153, 0.3)"
+          strokeOpacity={0.3}
         />
       );
-    }
-    
-    return null;
-  };
-  
-  return (
-    <div className="w-full">
-      {/* Add chart summary metrics */}
-      {chartMetrics && (
-        <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
-          <div className="text-muted-foreground">
-            Period: <span className="text-foreground font-medium">
-              {new Date(chartMetrics.startDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})} - 
-              {new Date(chartMetrics.endDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
-            </span>
-          </div>
-          <div className="text-muted-foreground">
-            Change: <span className={cn(
-              "font-medium",
-              chartMetrics.periodChange >= 0 ? "text-app-green" : "text-app-red"
-            )}>
-              {chartMetrics.periodChange >= 0 ? "+" : ""}{chartMetrics.periodChange.toFixed(2)}%
-            </span>
-          </div>
-          <div className="text-muted-foreground">
-            Range: <span className="font-medium">${chartMetrics.lowestLow.toFixed(2)} - ${chartMetrics.highestHigh.toFixed(2)}</span>
-          </div>
-          <div className="text-muted-foreground">
-            Avg Vol: <span className="font-medium">{chartMetrics.avgDailyVolatility.toFixed(2)}%</span>
-          </div>
-        </div>
-      )}
-      
-      {/* Main chart */}
-      <div className="h-[400px]">
-        <ResponsiveContainer width="100%" height="100%">
+    };
+
+    const combinedData = filteredData.map(item => {
+      const sma10Value = getSMAValue(item.date, 'sma10');
+      const sma30Value = getSMAValue(item.date, 'sma30');
+      const sma50Value = getSMAValue(item.date, 'sma50');
+
+      return {
+        ...item,
+        sma10: sma10Value,
+        sma30: sma30Value,
+        sma50: sma50Value,
+      };
+    });
+
+    return (
+      <>
+        <ResponsiveContainer width="100%" height={400}>
           <ComposedChart
-            data={chartData}
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            animationDuration={1000}
-            animationEasing="ease-in-out"
+            data={combinedData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            
-            <XAxis 
-              dataKey="date" 
-              tick={{ fill: '#9CA3AF' }}
-              tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              minTickGap={30}
+            <CartesianGrid stroke="#f5f5f5" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={(date) => format(new Date(date), 'MMM dd')}
+              interval="preserveStartEnd"
             />
-            
-            <YAxis 
-              domain={[minPrice, maxPrice]} 
-              tick={{ fill: '#9CA3AF' }}
-              tickFormatter={(value) => `$${value}`}
-              orientation="right"
-              width={60}
-              tickCount={6}
-            />
-            
-            <Tooltip content={renderTooltip} />
+            <YAxis domain={['dataMin - 10', 'dataMax + 10']} />
+            <Tooltip content={renderTooltipContent} />
             <Legend />
-            
-            {/* Pattern highlighting */}
-            {selectedPattern && patternStartDate && patternEndDate && (
-              <ReferenceArea 
-                x1={patternStartDate} 
-                x2={patternEndDate} 
-                fill={getPatternColor()} 
-                fillOpacity={0.3} 
-                stroke={selectedPattern.signal === 'bullish' ? "#22C55E" : 
-                        selectedPattern.signal === 'bearish' ? "#EF4444" : "#f59e0b"}
-                strokeDasharray="3 3"
-                strokeWidth={1.5}
+            <Bar dataKey="volume" barSize={5} fill="#413ea0" />
+            <Line type="monotone" dataKey="sma10" stroke="#8884d8" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sma30" stroke="#82ca9d" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sma50" stroke="#e45649" strokeWidth={1.5} dot={false} />
+            {filteredData.map((entry, index) => (
+              <ReferenceArea
+                key={`area-${index}`}
+                x1={entry.date}
+                x2={entry.date}
+                stroke="rgba(255, 0, 0, 0.1)"
+                strokeOpacity={0.3}
               />
-            )}
-            
-            {/* Support/Resistance line */}
-            {renderSupportResistanceLines()}
-            
-            {/* Moving Averages */}
-            {showSMA && (
-              <>
-                <Line 
-                  type="monotone" 
-                  dataKey="sma10" 
-                  stroke="#22C55E" 
-                  strokeWidth={1.5} 
-                  dot={false}
-                  name="SMA10"
-                  activeDot={false}
-                  animationDuration={1500}
-                  isAnimationActive={true}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="sma30" 
-                  stroke="#f59e0b" 
-                  strokeWidth={1.5} 
-                  dot={false}
-                  name="SMA30"
-                  activeDot={false}
-                  animationDuration={1500}
-                  isAnimationActive={true}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="sma50" 
-                  stroke="#EF4444" 
-                  strokeWidth={1.5} 
-                  dot={false}
-                  name="SMA50"
-                  activeDot={false}
-                  animationDuration={1500}
-                  isAnimationActive={true}
-                />
-              </>
-            )}
-            
-            {/* Volume Bars (displayed at bottom) */}
-            {showVolume && (
-              <Bar 
-                dataKey="volumeScaled" 
-                shape={<VolumeBar />} 
-                barSize={6}
-                name="Volume"
-                isAnimationActive={true}
-                animationDuration={1200}
-                animationEasing="ease-out"
-              />
-            )}
-            
-            {/* Candlesticks */}
-            <Bar
-              dataKey="highLowRange"
-              shape={<CandlestickBar />}
-              name="OHLC"
-              isAnimationActive={true}
-              animationDuration={1000}
-              animationEasing="ease-out"
-            />
+            ))}
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
-      
-      {/* Volume Chart (separate) */}
-      {showVolume && (
-        <div className="h-[100px] mt-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={chartData}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              animationDuration={1000}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-              <XAxis 
-                dataKey="date" 
-                tick={{ fill: '#9CA3AF' }}
-                tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                minTickGap={50}
-                height={20}
-              />
-              <YAxis 
-                tick={{ fill: '#9CA3AF' }}
-                tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(0)}M` : `${(value / 1000).toFixed(0)}K`}
-                orientation="right"
-                width={50}
-              />
-              
-              <Tooltip content={renderTooltip} />
-              
-              <Bar 
-                dataKey="volume" 
-                shape={<VolumeBar />} 
-                barSize={6}
-                isAnimationActive={true}
-                animationDuration={1200}
-              />
-              
-              {/* Highlight pattern area in volume chart too */}
-              {selectedPattern && patternStartDate && patternEndDate && (
-                <ReferenceArea 
-                  x1={patternStartDate} 
-                  x2={patternEndDate} 
-                  fillOpacity={0.3}
-                  fill={getPatternColor()}
-                />
+
+        <ResponsiveContainer width="100%" height={80}>
+          <ComposedChart
+            data={smaData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
+          >
+            <CartesianGrid stroke="#f5f5f5" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={(date) => format(new Date(date), 'MMM dd')}
+              interval="preserveStartEnd"
+            />
+            <YAxis domain={['dataMin - 10', 'dataMax + 10']} />
+            <Tooltip content={renderTooltipContent} />
+            <Legend />
+            <Line type="monotone" dataKey="sma10" stroke="#8884d8" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sma30" stroke="#82ca9d" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sma50" stroke="#e45649" strokeWidth={1.5} dot={false} />
+            {smaData && smaData.length > 0 && renderBrush()}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </>
+    );
+  };
+
+  return (
+    <div className="w-full">
+      <div className="flex justify-between items-center mb-4">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={"outline"}
+              className={cn(
+                "w-[200px] justify-start text-left font-normal",
+                !dateRange?.from && "text-muted-foreground"
               )}
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      
-      {/* Pattern label if one is selected */}
-      {selectedPattern && (
-        <div className="mt-3 px-3 py-2 border rounded bg-card/50">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Selected Pattern: </span>
-            <span className="font-medium">
-              {selectedPattern.patternType.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
-            </span>
-            <span className={cn(
-              "ml-2 inline-block px-2 py-0.5 rounded-full text-xs",
-              selectedPattern.signal === 'bullish' ? "bg-app-green/20 text-app-green" :
-              selectedPattern.signal === 'bearish' ? "bg-app-red/20 text-app-red" :
-              "bg-yellow-500/20 text-yellow-500"
-            )}>
-              {selectedPattern.signal.charAt(0).toUpperCase() + selectedPattern.signal.slice(1)}
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            {selectedPattern.description}
-          </div>
-        </div>
-      )}
-      
-      {/* Add CSS animations */}
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 0.9; }
+            >
+              <CalendarRange className="mr-2 h-4 w-4" />
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>
+                    {format(dateRange.from, "MMM d, yyyy")} -{" "}
+                    {format(dateRange.to, "MMM d, yyyy")}
+                  </>
+                ) : (
+                  format(dateRange.from, "MMM d, yyyy")
+                )
+              ) : (
+                <span>Pick a date</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end" side="bottom">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+      {renderChart()}
+      <style>{`
+        .recharts-tooltip-item-name {
+          font-weight: bold;
         }
-        @keyframes growIn {
-          from { transform: scaleX(0); opacity: 0; }
-          to { transform: scaleX(1); opacity: 0.9; }
-        }
-        @keyframes growUp {
-          from { transform: scaleY(0); opacity: 0; }
-          to { transform: scaleY(1); opacity: 0.7; }
+        .recharts-tooltip-item-value {
+          font-style: italic;
         }
       `}</style>
-      
-      {/* Display data source indicator */}
-      {isUsingDemoData && (
-        <div className="text-xs text-amber-500 mt-2 text-center">
-          Using simulated data. Connect API keys for real-time market data.
-        </div>
-      )}
     </div>
   );
 };
 
 export default CandlestickChart;
-

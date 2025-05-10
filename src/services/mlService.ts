@@ -45,6 +45,8 @@ export const generatePricePrediction = (
     targetPrice,
     timeframe: '1m', // Default to 1 month prediction
     probability: confidence,
+    direction: trend.slope > 0 ? 'up' : 'down', // Add direction
+    explanation: [`Based on ${trend.slope > 0 ? 'positive' : 'negative'} trend analysis`], // Add explanation
     expectedMove,
     supportLevels: levels.support,
     resistanceLevels: levels.resistance
@@ -59,6 +61,8 @@ const getDefaultPrediction = (currentPrice: number): AIPrediction => {
     targetPrice: currentPrice,
     timeframe: '1m',
     probability: 0.5,
+    direction: 'neutral',
+    explanation: ['Not enough data to generate prediction'],
     expectedMove: 0,
     supportLevels: [currentPrice * 0.9],
     resistanceLevels: [currentPrice * 1.1]
@@ -423,4 +427,4 @@ export const updateModelWeights = (
   const adjustments = JSON.parse(storedAdjustments);
   adjustments.push(modelAdjustment);
   localStorage.setItem('modelAdjustments', JSON.stringify(adjustments));
-}; 
+};

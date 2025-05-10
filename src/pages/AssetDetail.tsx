@@ -17,6 +17,9 @@ import AssetHeader from '@/components/AssetHeader';
 import PatternDetection from '@/components/PatternDetection';
 import PatternDetectionFeatures from '@/components/PatternDetectionFeatures';
 import { useToast } from "@/hooks/use-toast";
+import { generatePricePrediction, generateTechnicalIndicators, updateModelWeights } from '@/services/mlService';
+import ExplainableAI from '@/components/ExplainableAI';
+import OnChainAnalytics from '@/components/OnChainAnalytics';
 
 const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -96,7 +99,7 @@ const AssetDetail = () => {
     loadAssetData();
   }, [id, assets, toast]);
   
-  // Load chart data - updated to use our multi-source data with enhanced error handling
+  // Load chart data - updated toast variant
   useEffect(() => {
     if (!asset) return;
     
@@ -130,7 +133,7 @@ const AssetDetail = () => {
           toast({
             title: "Limited Data Available",
             description: "Using sample data for chart visualization.",
-            variant: "warning"
+            variant: "default" // Changed from warning to default
           });
           
           // Generate sample data if no real data available
@@ -351,7 +354,7 @@ const AssetDetail = () => {
         toast({
           title: "News Data Error",
           description: "Failed to load news data. Using technical analysis only.",
-          variant: "warning"
+          variant: "default" // Changed from warning to default
         });
       }
     };
@@ -377,7 +380,7 @@ const AssetDetail = () => {
         toast({
           title: "On-Chain Data Error",
           description: "Failed to load on-chain data. Using price data only.",
-          variant: "warning"
+          variant: "default" // Changed from warning to default
         });
       }
     };
