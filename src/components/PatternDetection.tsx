@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { PatternResult, CandlestickData, Asset } from '@/lib/types';
@@ -13,8 +14,7 @@ import {
   Triangle, 
   LineChart, 
   AlertCircle, 
-  Info, 
-  Eye,
+  Info,
   RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -241,4 +241,4 @@ const PatternDetection: React.FC<PatternDetectionProps> = ({
   );
 };
 
-export default PatternDetection; 
+export default PatternDetection;
